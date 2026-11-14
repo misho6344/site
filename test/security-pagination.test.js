@@ -116,3 +116,62 @@ test("GitHub Actions runs npm ci and npm test with read-only repository permissi
   assert.ok(workflow.includes("run: npm ci"));
   assert.ok(workflow.includes("run: npm test"));
 });
+
+
+test("Upstash rate-limit store performs an atomic shared increment and returns its expiry", async () => {
+  const { UpstashRateLimitStore } = require("../lib/upstash-rate-limit-store");
+  const originalFetch = global.fetch;
+  let request;
+  try {
+    global.fetch = async (url, options) => {
+      request = { url, options, body: JSON.parse(options.body) };
+      return { ok: true, status: 200, json: async () => ({ result: [4, 45000] }) };
+    };
+    const store = new UpstashRateLimitStore({
+      url: "https://example.upstash.io",
+      token: "test-token",
+      prefix: "test:limit:"
+    });
+    store.init({ windowMs: 60000 });
+    const result = await store.increment("192.0.2.1");
+    assert.equal(result.totalHits, 4);
+    assert.ok(result.resetTime instanceof Date);
+    assert.ok(result.resetTime.getTime() >= Date.now() + 44000);
+    assert.equal(request.url, "https://example.upstash.io");
+    assert.equal(request.options.headers.Authorization, "Bearer test-token");
+    assert.equal(request.body[0], "EVAL");
+    assert.equal(request.body[2], "1");
+    assert.equal(request.body[3], "test:limit:192.0.2.1");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("Upstash rate-limit store fails closed when Redis reports an error", async () => {
+  const { UpstashRateLimitStore } = require("../lib/upstash-rate-limit-store");
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: "invalid token" }) });
+    const store = new UpstashRateLimitStore({
+      url: "https://example.upstash.io",
+      token: "invalid-token"
+    });
+    store.init({ windowMs: 60000 });
+    await assert.rejects(store.increment("192.0.2.2"), /failed \(HTTP 401\)/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("server applies global and API limits before parsing request bodies and configures slow-request timeouts", () => {
+  const source = fs.readFileSync(path.join(root, "server.js"), "utf8");
+  assert.ok(source.includes('const globalLimiter = limiter("global"'));
+  assert.ok(source.includes('const apiLimiter = limiter("api"'));
+  assert.ok(source.indexOf("app.use(globalLimiter)") < source.indexOf("app.use(express.json"));
+  assert.ok(source.includes('app.use("/api", apiLimiter)'));
+  assert.ok(source.includes("server.headersTimeout = 10_000"));
+  assert.ok(source.includes("server.requestTimeout = 30_000"));
+  assert.ok(source.includes("server.maxHeadersCount = 50"));
+  assert.ok(source.includes("ORIGIN_ACCESS_TOKEN"));
+  assert.ok(source.includes("UPSTASH_REDIS_REST_URL"));
+});

@@ -141,7 +141,45 @@ curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
 
 სხვა ჰოსტინგი (Railway, Fly.io, VPS) იგივენაირად მუშაობს: ნებისმიერი Node 20+ გარემო, `npm start` და იგივე ცვლადები.
 
-## 9. API
+
+## 9. DDoS და ტრაფიკისგან დაცვა
+
+სერვერს ახლა აქვს რამდენიმე ფენა:
+
+- ყველა მოთხოვნაზე საერთო ლიმიტი: 300 მოთხოვნა/IP-ზე წუთში.
+- API-ზე დამატებითი ლიმიტი: 120 მოთხოვნა/IP-ზე წუთში.
+- უფრო მკაცრი ზღვარი login/register/password reset/assistant/archive-video/catalogue endpoint-ებისთვის.
+- 429 პასუხი და Retry-After/RateLimit-* headers ლიმიტის გადაჭარბებისას.
+- JSON body მაქსიმუმ 32 KB; HTTP headers მაქსიმუმ 8 KB და 50 header; headers/body მიღების timeout-ები.
+- სურვილისამებრ, Cloudflare-იდან origin-მდე საიდუმლო header, რომ Render-ის პირდაპირი მისამართით Cloudflare WAF-ის გვერდის ავლა გართულდეს.
+
+### საზიარო rate limit რამდენიმე instance-ისთვის (რეკომენდებულია)
+
+თუ აპი ერთზე მეტ instance-ზე გაეშვება, ჩართეთ Upstash Redis REST store. შექმენით Redis ბაზა Upstash-ში და Render-ის Environment-ში დაამატეთ:
+
+| ცვლადი | მნიშვნელობა |
+|---|---|
+| UPSTASH_REDIS_REST_URL | Upstash-ის HTTPS REST URL |
+| UPSTASH_REDIS_REST_TOKEN | Upstash-ის საიდუმლო REST token |
+
+ორივე მნიშვნელობა შეინახეთ მხოლოდ Render-ის Environment-ში — **არ ჩასვათ GitHub-ში ან Frontend-ში**. Counter იზრდება Redis-ის ერთ ატომურ Lua ოპერაციაში და ყველა instance იყენებს ერთსა და იმავე ლიმიტს. Redis-ის შეცდომისას configured rate limiter მოთხოვნას არ ატარებს (fail-closed). თუ ეს ცვლადები არ არის დაყენებული, გამოიყენება პროცესის მეხსიერების store; ეს გამოდგება ერთი instance-ისთვის/ლოკალური ტესტისთვის, მაგრამ რამდენიმე instance-ზე საერთო ლიმიტს ვერ უზრუნველყოფს.
+
+### Cloudflare-ის edge დაცვა
+
+Render-ს უკვე აქვს შემომავალი ტრაფიკის edge DDoS დაცვა, მაგრამ აპლიკაციის endpoint-ების abuse-ს ცალკე კონტროლი სჭირდება. დამატებითი ფენა:
+
+1. მიაბით საკუთარი დომენი Cloudflare-ს და DNS ჩანაწერზე ჩართეთ Proxy (orange cloud); SSL/TLS რეჟიმი დააყენეთ **Full (strict)**.
+2. Cloudflare Security-ში დატოვეთ DDoS managed protection ჩართული და ჩართეთ WAF Managed Rules, როცა ხელმისაწვდომია.
+3. შექმენით Rate Limiting rule მინიმუმ /api/*-ზე; ცალკე, უფრო მკაცრი წესები დაუწესეთ /api/auth/login, /api/auth/register, /api/auth/forgot-password და /api/assistant გზებს. API-ზე გამოიყენეთ Block და არა browser challenge, რადგან challenge-მა საიტის fetch() მოთხოვნები შეიძლება დაარღვიოს. ზღვარი მოარგეთ რეალურ ტრაფიკს; Cloudflare-ის rate-limiting ფუნქციები/რაოდენობა გეგმის მიხედვით განსხვავდება.
+4. **Origin-ის დაცვა:** Cloudflare-ის Proxy/WAF მარტო არ კმარა, თუ თავდამსხმელს შეუძლია Render-ის *.onrender.com მისამართით პირდაპირ შესვლა. შექმენით შემთხვევითი token:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+   ```
+   დაამატეთ Render Environment-ში ORIGIN_ACCESS_TOKEN. Cloudflare Rules → Transform Rules → Modify Request Header-ში დაამატეთ X-Origin-Access-Token იგივე მნიშვნელობით თქვენი საიტის hostname-ისთვის. აპი ამ header-ს ამოწმებს და მის გარეშე პირდაპირ origin-ზე მისულ მოთხოვნას უარყოფს; /api/health გამონაკლისია Render-ის health check-ისთვის. ეს ჩართეთ მხოლოდ მას შემდეგ, რაც Cloudflare header rule მზად იქნება, თორემ საიტზე ჩვეულებრივი წვდომაც დაიბლოკება.
+5. Render-ზე TRUST_PROXY_HOPS ნაგულისხმევად არის 1. შეცვალეთ მხოლოდ მაშინ, როცა თქვენი proxy chain-ის რეალური რაოდენობა გადაამოწმეთ; არასოდეს გამოიყენოთ trust proxy = true ან მომხმარებლის მიერ მოწოდებული X-Forwarded-For უპირობოდ.
+
+**მნიშვნელოვანი:** Express-ის rate limit ვერ აჩერებს ქსელურ flood-ს მანამდე, სანამ ტრაფიკი ჰოსტამდე მივა. ამიტომ Render/Cloudflare edge დაცვა, Cloudflare WAF და origin-ის გვერდის ავლის დაბლოკვა აუცილებელი გარე ფენებია. ვერცერთი კონფიგურაცია ვერ იძლევა გარანტიას, რომ ყველა ზომის DDoS შეტევა საიტს არასდროს გათიშავს.
+## 10. API
 
 | Method | Path | წვდომა |
 |---|---|---|
@@ -161,7 +199,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
 | POST / DELETE | `/api/admin/movies`, `/api/admin/movies/:id` | session cookie + CSRF + `ADMIN_EMAIL` |
 | POST | `/api/assistant` | საჯარო (rate-limited) |
 
-## 10. ავტორიზაცია და პაროლის აღდგენა
+## 11. ავტორიზაცია და პაროლის აღდგენა
 
 - JWT ინახება `HttpOnly`, production-ში `Secure`, `SameSite=Lax` session cookie-ში და JavaScript-იდან არ იკითხება. Unsafe cookie-auth მოთხოვნები ამოწმებს double-submit CSRF token-ს (`X-CSRF-Token`).
 - პაროლის აღდგენა იყენებს ერთჯერად SHA-256 token hash-ს და 30 წუთიან ვადას. წერილი იგზავნება Resend-ით; production-ში `RESEND_API_KEY`, `MAIL_FROM` და `APP_BASE_URL` აუცილებელია.
