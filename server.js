@@ -1,12 +1,14 @@
 require("dotenv").config();
 
 const express = require("express");
+const http = require("http");
 const cors = require("cors");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
+const { UpstashRateLimitStore } = require("./lib/upstash-rate-limit-store");
 const { parsePagination, paginationMeta } = require("./lib/pagination");
 const { SESSION_COOKIE, CSRF_COOKIE, cookieOptions, parseCookies, createResetToken, hashResetToken, csrfMatches, validPassword } = require("./lib/auth-security");
 const OpenAI = require("openai").default || require("openai");
@@ -17,12 +19,68 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 let pool;
 let openai;
-
-app.set("trust proxy", 1);
-app.disable("x-powered-by");
-if (process.env.CORS_ORIGIN) app.use(cors({ origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()), credentials: true }));
-app.use(express.json({ limit: "50kb" }));
 const production = process.env.NODE_ENV === "production";
+const trustProxyHops = process.env.TRUST_PROXY_HOPS === undefined
+  ? (production ? 1 : 0)
+  : Number(process.env.TRUST_PROXY_HOPS);
+if (!Number.isSafeInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 10) {
+  throw new Error("TRUST_PROXY_HOPS must be an integer from 0 to 10. Never set trust proxy to true.");
+}
+
+const upstashUrl = process.env.UPSTASH_REDIS_REST_URL || "";
+const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN || "";
+if (Boolean(upstashUrl) !== Boolean(upstashToken)) {
+  throw new Error("Set both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, or leave both empty.");
+}
+const sharedRateLimitEnabled = Boolean(upstashUrl && upstashToken);
+
+app.set("trust proxy", trustProxyHops);
+app.disable("x-powered-by");
+
+const originAccessToken = process.env.ORIGIN_ACCESS_TOKEN || "";
+app.use((req, res, next) => {
+  if (!production || !originAccessToken || req.path === "/api/health") return next();
+  const received = Buffer.from(req.get("x-origin-access-token") || "");
+  const expected = Buffer.from(originAccessToken);
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
+    return res.status(403).json({ error: "Origin access denied." });
+  }
+  next();
+});
+
+const rateLimitStore = (scope) => sharedRateLimitEnabled
+  ? new UpstashRateLimitStore({
+      url: upstashUrl,
+      token: upstashToken,
+      prefix: `noadframe:rate-limit:${scope}:`
+    })
+  : undefined;
+const limiter = (scope, windowMs, max, message) => rateLimit({
+  windowMs,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: false,
+  store: rateLimitStore(scope),
+  message: { error: message }
+});
+
+const globalLimiter = limiter("global", 60 * 1000, 300, "Too many requests. Please slow down.");
+const apiLimiter = limiter("api", 60 * 1000, 120, "API request limit reached. Please try again shortly.");
+const loginLimiter = limiter("login", 15 * 60 * 1000, 10, "Too many login attempts. Please wait 15 minutes.");
+const registerLimiter = limiter("register", 60 * 60 * 1000, 5, "Too many registration attempts. Please try again later.");
+const forgotPasswordLimiter = limiter("forgot-password", 15 * 60 * 1000, 3, "Too many password-reset requests. Please try again later.");
+const resetPasswordLimiter = limiter("reset-password", 15 * 60 * 1000, 8, "Too many reset attempts. Please try again later.");
+const passwordChangeLimiter = limiter("change-password", 15 * 60 * 1000, 5, "Too many password-change attempts. Please try again later.");
+const commentLimiter = limiter("comments", 10 * 60 * 1000, 20, "You are commenting too fast. Please slow down.");
+const assistantLimiter = limiter("assistant", 5 * 60 * 1000, 6, "The assistant request limit has been reached. Please wait a few minutes.");
+const archiveVideoLimiter = limiter("archive-video", 60 * 1000, 10, "Too many video metadata requests. Please try again shortly.");
+const catalogueLimiter = limiter("catalogue", 60 * 1000, 60, "Too many catalogue requests. Please try again shortly.");
+
+app.use(globalLimiter);
+app.use("/api", apiLimiter);
+if (process.env.CORS_ORIGIN) app.use(cors({ origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()), credentials: true }));
+app.use(express.json({ limit: "32kb" }));
 function appendCookie(res, name, value, options = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${options.path || "/"}`, "SameSite=Lax"];
   if (options.maxAge !== undefined) parts.push(`Max-Age=${Math.floor(options.maxAge / 1000)}`);
@@ -101,14 +159,10 @@ function optionalAuth(req, _res, next) {
 function adminOnly(req, _res, next) {
   next(isAdmin(req.user) ? undefined : httpError(403, "Administrator access required."));
 }
-const limiter = (windowMinutes, max, message) =>
-  rateLimit({ windowMs: windowMinutes * 60 * 1000, max, standardHeaders: true, legacyHeaders: false, message: { error: message } });
-const authLimiter = limiter(15, 30, "Too many attempts. Please wait a few minutes.");
-const commentLimiter = limiter(10, 20, "You are commenting too fast. Please slow down.");
-const assistantLimiter = limiter(10, 30, "Too many assistant messages. Please wait a few minutes.");
+
 
 /* ---------- health ---------- */
-app.get("/api/archive-video", wrap(async (req, res) => {
+app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   const identifier = text(req.query.identifier, 180);
   if (!/^[a-zA-Z0-9._-]{1,180}$/.test(identifier)) throw httpError(400, "Invalid Archive.org identifier.");
   const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`);
@@ -138,13 +192,13 @@ app.get("/api/archive-video", wrap(async (req, res) => {
   res.json({ videoUrl: `https://archive.org/download/${encodeURIComponent(identifier)}/${name}` });
 }));
 
-app.get("/api/health", wrap(async (_req, res) => {
+app.get("/api/health", healthLimiter, wrap(async (_req, res) => {
   await pool.query("SELECT 1");
   res.json({ status: "ok", database: "connected" });
 }));
 
 /* ---------- auth ---------- */
-app.post("/api/auth/register", authLimiter, wrap(async (req, res) => {
+app.post("/api/auth/register", registerLimiter, wrap(async (req, res) => {
   const username = text(req.body?.username ?? req.body?.name, 30);
   const email = text(req.body?.email, 254).toLowerCase();
   const password = String(req.body?.password || "");
@@ -162,7 +216,7 @@ app.post("/api/auth/register", authLimiter, wrap(async (req, res) => {
   res.status(201).json({ user });
 }));
 
-app.post("/api/auth/login", authLimiter, wrap(async (req, res) => {
+app.post("/api/auth/login", loginLimiter, wrap(async (req, res) => {
   const identifier = text(req.body?.email ?? req.body?.identifier, 254).toLowerCase();
   const password = String(req.body?.password || "");
   const [rows] = await pool.query("SELECT * FROM users WHERE email = ? OR LOWER(username) = ?", [identifier, identifier]);
@@ -178,7 +232,7 @@ app.post("/api/auth/logout", (_req, res) => {
   res.json({ message: "Logged out." });
 });
 
-app.post("/api/auth/forgot-password", authLimiter, wrap(async (req, res) => {
+app.post("/api/auth/forgot-password", forgotPasswordLimiter, wrap(async (req, res) => {
   const email = text(req.body?.email, 254).toLowerCase();
   if (!EMAIL_RE.test(email)) throw httpError(400, "Enter a valid email address.");
   const [rows] = await pool.query("SELECT id, email FROM users WHERE email = ? LIMIT 1", [email]);
@@ -208,7 +262,7 @@ app.post("/api/auth/forgot-password", authLimiter, wrap(async (req, res) => {
   res.json({ message: "If an account exists for that email, password reset instructions will be sent." });
 }));
 
-app.post("/api/auth/reset-password", authLimiter, wrap(async (req, res) => {
+app.post("/api/auth/reset-password", resetPasswordLimiter, wrap(async (req, res) => {
   const token = text(req.body?.token, 200);
   const password = String(req.body?.password || "");
   if (!token || !validPassword(password)) throw httpError(400, "Password must be at least 10 characters and include a letter and a number.");
@@ -233,7 +287,7 @@ app.get("/api/auth/me", auth, wrap(async (req, res) => {
   res.json({ user: rows[0], stats: { comments: count.total }, comments, isAdmin: isAdmin(rows[0]) });
 }));
 
-app.post("/api/auth/change-password", auth, authLimiter, wrap(async (req, res) => {
+app.post("/api/auth/change-password", auth, passwordChangeLimiter, wrap(async (req, res) => {
   const current = String(req.body?.currentPassword || "");
   const next = String(req.body?.newPassword || "");
   if (next.length < 8 || next.length > 72) throw httpError(400, "New password must be 8–72 characters.");
@@ -252,7 +306,7 @@ const SORTS = {
   title: "m.title_en ASC"
 };
 
-app.get("/api/movies", wrap(async (req, res) => {
+app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
   const q = text(req.query.q ?? req.query.title, 100);
   const genre = text(req.query.genre, 50);
   const yearRaw = req.query.year;
@@ -436,6 +490,7 @@ app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.h
 
 app.use((err, _req, res, _next) => {
   if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid JSON." });
+  if (err.type === "entity.too.large") return res.status(413).json({ error: "Request body is too large." });
   if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
   console.error(err);
   res.status(err.status || 500).json({ error: err.status === 502 || err.status === 503 ? err.message : "Something went wrong on the server." });
@@ -452,7 +507,20 @@ app.use((err, _req, res, _next) => {
     }
     pool = createPool();
     await initSchema(pool);
-    app.listen(PORT, () => console.log(`NoAdFrame server running on http://localhost:${PORT}`));
+
+    if (production && !sharedRateLimitEnabled) {
+      console.warn("DDoS hardening: rate limits are process-local. Configure both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to share counters across instances.");
+    }
+    if (production && !originAccessToken) {
+      console.warn("DDoS hardening: ORIGIN_ACCESS_TOKEN is not set. Requests may reach the Render origin without passing through Cloudflare WAF rules.");
+    }
+
+    const server = http.createServer({ maxHeaderSize: 8 * 1024 }, app);
+    server.headersTimeout = 10_000;
+    server.requestTimeout = 30_000;
+    server.keepAliveTimeout = 5_000;
+    server.maxHeadersCount = 50;
+    server.listen(PORT, () => console.log(`NoAdFrame server running on http://localhost:${PORT}`));
   } catch (error) {
     console.error("Startup failed:", error.message);
     process.exit(1);
