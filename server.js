@@ -37,17 +37,6 @@ const sharedRateLimitEnabled = Boolean(upstashUrl && upstashToken);
 app.set("trust proxy", trustProxyHops);
 app.disable("x-powered-by");
 
-const originAccessToken = process.env.ORIGIN_ACCESS_TOKEN || "";
-app.use((req, res, next) => {
-  if (!production || !originAccessToken || req.path === "/api/health") return next();
-  const received = Buffer.from(req.get("x-origin-access-token") || "");
-  const expected = Buffer.from(originAccessToken);
-  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
-    return res.status(403).json({ error: "Origin access denied." });
-  }
-  next();
-});
-
 const rateLimitStore = (scope) => sharedRateLimitEnabled
   ? new UpstashRateLimitStore({
       url: upstashUrl,
@@ -67,6 +56,7 @@ const limiter = (scope, windowMs, max, message) => rateLimit({
 
 const globalLimiter = limiter("global", 60 * 1000, 300, "Too many requests. Please slow down.");
 const apiLimiter = limiter("api", 60 * 1000, 120, "API request limit reached. Please try again shortly.");
+const healthLimiter = limiter("health", 60 * 1000, 30, "Too many health checks. Please try again shortly.");
 const loginLimiter = limiter("login", 15 * 60 * 1000, 10, "Too many login attempts. Please wait 15 minutes.");
 const registerLimiter = limiter("register", 60 * 60 * 1000, 5, "Too many registration attempts. Please try again later.");
 const forgotPasswordLimiter = limiter("forgot-password", 15 * 60 * 1000, 3, "Too many password-reset requests. Please try again later.");
@@ -79,6 +69,20 @@ const catalogueLimiter = limiter("catalogue", 60 * 1000, 60, "Too many catalogue
 
 app.use(globalLimiter);
 app.use("/api", apiLimiter);
+
+const originAccessToken = process.env.ORIGIN_ACCESS_TOKEN || "";
+if (originAccessToken && originAccessToken.length < 32) {
+  throw new Error("ORIGIN_ACCESS_TOKEN must contain at least 32 characters.");
+}
+app.use((req, res, next) => {
+  if (!production || !originAccessToken || req.path === "/api/health") return next();
+  const received = Buffer.from(req.get("x-origin-access-token") || "");
+  const expected = Buffer.from(originAccessToken);
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
+    return res.status(403).json({ error: "Origin access denied." });
+  }
+  next();
+});
 if (process.env.CORS_ORIGIN) app.use(cors({ origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()), credentials: true }));
 app.use(express.json({ limit: "32kb" }));
 function appendCookie(res, name, value, options = {}) {
