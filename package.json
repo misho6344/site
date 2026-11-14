@@ -4,12 +4,15 @@
   "private": true,
   "description": "NoAdFrame — Watch. Enjoy. No Ads. Movie discovery site with IMDb ratings, accounts, comments and a site-scoped AI assistant.",
   "main": "server.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node scripts/seed.js",
-    "preview": "node preview/server.js"
+    "preview": "node preview/server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

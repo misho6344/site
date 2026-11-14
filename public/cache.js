@@ -1,7 +1,7 @@
 /* Small stale-while-revalidate cache for public catalog GET endpoints. */
 (() => {
   "use strict";
-  const PREFIX = "noadframe_api_cache_v1:";
+  const PREFIX = "noadframe_api_cache_v2:";
   const TTL_MS = 10 * 60 * 1000;
   const originalFetch = window.fetch.bind(window);
   const refreshing = new Map();

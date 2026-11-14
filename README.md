@@ -66,6 +66,11 @@ cp .env.example .env      # Windows: copy .env.example .env
 | `OPENAI_API_KEY` | OpenAI გასაღები — AI ასისტენტისთვის |
 | `OPENAI_MODEL` | მოდელი (ნაგულისხმევი `gpt-4.1-mini`) |
 | `ADMIN_EMAIL` | იმ ანგარიშის ელფოსტა, რომელსაც ფილმების დამატება/წაშლა შეუძლია |
+| `NODE_ENV` | production-ზე დააყენეთ `production` — Secure cookie-ებისა და production შემოწმებებისთვის |
+| `RESEND_API_KEY` | Resend API key პაროლის აღდგენის წერილებისთვის (production-ში სავალდებულოა) |
+| `MAIL_FROM` | დადასტურებული გამომგზავნის მისამართი Resend-ში |
+| `APP_BASE_URL` | საიტის სრული HTTPS მისამართი reset ბმულისთვის (production-ში სავალდებულოა) |
+| `PASSWORD_RESET_URL` | სურვილისამებრ, reset გვერდის სრული URL; ნაგულისხმევი `/#/reset-password` |
 
 `.env` არასოდეს ატვირთოთ GitHub-ზე (`.gitignore`-ში უკვე წერია). გასაღებები მხოლოდ სერვერზეა, Frontend-ში არსად ჩანს.
 
@@ -87,11 +92,14 @@ IMDb რეიტინგი, ჟანრი, რეჟისორი, მს
 npm run seed
 ```
 
-**ვარიანტი B — Admin API.** დარეგისტრირდით საიტზე `ADMIN_EMAIL`-ის ელფოსტით, შედით ანგარიშში და გაგზავნეთ (JWT ტოკენი არის `localStorage`-ში `noadframe_token` გასაღებით):
+**ვარიანტი B — Admin API.** დარეგისტრირდით საიტზე `ADMIN_EMAIL`-ის ელფოსტით და შედით ანგარიშში. სესია ინახება `HttpOnly` cookie-ში; API-ის მოთხოვნებს სჭირდება იგივე cookie და CSRF header. `curl`-ის მაგალითი:
 
 ```bash
-curl -X POST http://localhost:3000/api/admin/movies \
-  -H "Authorization: Bearer YOUR_TOKEN" -H "Content-Type: application/json" \
+curl -c cookies.txt -b cookies.txt -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" -d '{"email":"ADMIN_EMAIL","password":"YOUR_PASSWORD"}'
+CSRF=$(awk '$6 == "noadframe_csrf" {print $7}' cookies.txt)
+curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
+  -H "X-CSRF-Token: $CSRF" -H "Content-Type: application/json" \
   -d '{"imdbId":"tt0111161","titleKa":"შოუშენკის გამოსყიდვა","posterUrl":"https://...","backdropUrl":"https://...","videoUrl":"https://..."}'
 ```
 
@@ -125,8 +133,8 @@ curl -X POST http://localhost:3000/api/admin/movies \
 
 1. ატვირთეთ პროექტი GitHub-ზე (`.env` გარეშე).
 2. https://render.com → **New → Web Service** → აირჩიეთ რეპოზიტორია.
-3. Runtime: Node. Build command: `npm install`. Start command: `npm start`.
-4. **Environment** განყოფილებაში დაამატეთ `.env`-ის ყველა ცვლადი (`DATABASE_URL`, `JWT_SECRET`, `OMDB_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ADMIN_EMAIL`).
+3. Runtime: Node. Build command: `npm ci`. Start command: `npm start`.
+4. **Environment** განყოფილებაში დაამატეთ `.env`-ის ცვლადები, მათ შორის `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `OMDB_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM` და `APP_BASE_URL`.
 5. TiDB Cloud-ში, თუ IP allowlist გაქვთ ჩართული, დაუშვით Render-ის გამავალი IP-ები (ან გახსენით წვდომა სატესტოდ).
 6. Deploy-ის შემდეგ გაუშვით seed ერთხელ ლოკალურად (იმავე `DATABASE_URL`-ით) ან გამოიყენეთ Admin API.
 7. საკუთარი დომენი: Render → Settings → Custom Domains. თუ Frontend სხვა დომენზე გაქვთ, დაამატეთ `CORS_ORIGIN=https://your-domain.com`.
@@ -139,24 +147,27 @@ curl -X POST http://localhost:3000/api/admin/movies \
 |---|---|---|
 | GET | `/api/health` | საჯარო |
 | POST | `/api/auth/register`, `/api/auth/login` | საჯარო |
-| GET | `/api/auth/me` | JWT |
-| POST | `/api/auth/change-password` | JWT |
-| GET | `/api/movies?q=&genre=&year=&minRating=&sort=&limit=` | საჯარო |
+| GET | `/api/auth/me` | HttpOnly session cookie |
+| POST | `/api/auth/logout` | cookie session + CSRF |
+| POST | `/api/auth/forgot-password`, `/api/auth/reset-password` | საჯარო (rate-limited) |
+| POST | `/api/auth/change-password` | cookie session + CSRF |
+| GET | `/api/movies?q=&title=&genre=&year=&minRating=&sort=&page=&limit=` | საჯარო; აბრუნებს `page`, `limit`, `total`, `totalPages`, `movies` |
 | GET | `/api/movies/categories` | საჯარო |
 | GET | `/api/genres` | საჯარო |
 | GET | `/api/movies/:id` | საჯარო |
 | GET | `/api/movies/:id/comments?sort=newest\|oldest` | საჯარო |
-| POST | `/api/movies/:id/comments` | JWT |
-| DELETE | `/api/comments/:id` | JWT (საკუთარი ან admin) |
-| POST / DELETE | `/api/admin/movies`, `/api/admin/movies/:id` | JWT + `ADMIN_EMAIL` |
+| POST | `/api/movies/:id/comments` | session cookie + CSRF |
+| DELETE | `/api/comments/:id` | session cookie + CSRF (საკუთარი ან admin) |
+| POST / DELETE | `/api/admin/movies`, `/api/admin/movies/:id` | session cookie + CSRF + `ADMIN_EMAIL` |
 | POST | `/api/assistant` | საჯარო (rate-limited) |
 
-## 10. საჯაროდ გაშვებამდე
+## 10. ავტორიზაცია და პაროლის აღდგენა
 
-- JWT ინახება `localStorage`-ში; ეს მარტივია, მაგრამ XSS-ის შემთხვევაში მოწყვლადია. საიტი ყველა მონაცემს escape-ს უკეთებს და CSP-ს იყენებს, მაგრამ უფრო მკაცრი მოდელისთვის გადადით httpOnly cookie-ზე.
-- დაამატეთ ელფოსტის დადასტურება, პაროლის აღდგენა და კომენტარების მოდერაცია.
-- შეზღუდეთ OpenAI გასაღების ხარჯი თქვენს OpenAI ანგარიშში (usage limit).
-- ბაზისთვის გამოიყენეთ შეზღუდული უფლებების მქონე მომხმარებელი და ჩართეთ backup.
+- JWT ინახება `HttpOnly`, production-ში `Secure`, `SameSite=Lax` session cookie-ში და JavaScript-იდან არ იკითხება. Unsafe cookie-auth მოთხოვნები ამოწმებს double-submit CSRF token-ს (`X-CSRF-Token`).
+- პაროლის აღდგენა იყენებს ერთჯერად SHA-256 token hash-ს და 30 წუთიან ვადას. წერილი იგზავნება Resend-ით; production-ში `RESEND_API_KEY`, `MAIL_FROM` და `APP_BASE_URL` აუცილებელია.
+- Reset ფორმა ხელმისაწვდომია `/#/reset-password` მისამართზე; ბმულში token query parameter-ით გადადის.
+- ახალი პაროლი უნდა იყოს მინიმუმ 10 სიმბოლო, შეიცავდეს ასოსა და ციფრს.
+- შეზღუდეთ OpenAI გასაღების ხარჯი თქვენს OpenAI ანგარიშში (usage limit) და ბაზისთვის გამოიყენეთ შეზღუდული უფლებების მქონე მომხმარებელი და ჩართეთ backup.
 
 ## ფაილების სტრუქტურა
 

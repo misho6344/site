@@ -6,6 +6,9 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
+const crypto = require("crypto");
+const { parsePagination, paginationMeta } = require("./lib/pagination");
+const { SESSION_COOKIE, CSRF_COOKIE, cookieOptions, parseCookies, createResetToken, hashResetToken, csrfMatches, validPassword } = require("./lib/auth-security");
 const OpenAI = require("openai").default || require("openai");
 const { createPool, initSchema } = require("./lib/db");
 const { upsertMovie, httpError } = require("./lib/movies");
@@ -17,8 +20,30 @@ let openai;
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
-app.use(cors(process.env.CORS_ORIGIN ? { origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()) } : undefined));
+if (process.env.CORS_ORIGIN) app.use(cors({ origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()), credentials: true }));
 app.use(express.json({ limit: "50kb" }));
+const production = process.env.NODE_ENV === "production";
+function appendCookie(res, name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${options.path || "/"}`, "SameSite=Lax"];
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${Math.floor(options.maxAge / 1000)}`);
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.secure) parts.push("Secure");
+  res.append("Set-Cookie", parts.join("; "));
+}
+function clearSessionCookie(res) { appendCookie(res, SESSION_COOKIE, "", { ...cookieOptions(production, 0), maxAge: 0 }); }
+function setSessionCookie(res, user) { appendCookie(res, SESSION_COOKIE, signToken(user), cookieOptions(production)); }
+app.use((req, res, next) => {
+  req.cookies = parseCookies(req.headers.cookie);
+  if (!req.cookies[CSRF_COOKIE]) appendCookie(res, CSRF_COOKIE, crypto.randomBytes(24).toString("base64url"), { secure: production, maxAge: 24 * 60 * 60 * 1000 });
+  next();
+});
+app.use((req, _res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  if (!req.cookies[SESSION_COOKIE]) return next();
+  const csrf = req.headers["x-csrf-token"];
+  if (!csrfMatches(req.cookies[CSRF_COOKIE], csrf)) return next(httpError(403, "CSRF validation failed."));
+  next();
+});
 app.use((_req, res, next) => {
   res.set({
     "X-Content-Type-Options": "nosniff",
@@ -55,16 +80,17 @@ const publicUser = (u) => ({ id: u.id, username: u.username, email: u.email, cre
 const isAdmin = (user) => !!process.env.ADMIN_EMAIL && String(user.email).toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase();
 
 function readToken(req) {
-  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const token = req.cookies?.[SESSION_COOKIE] || (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   return token ? jwt.verify(token, process.env.JWT_SECRET) : null;
 }
-function auth(req, _res, next) {
+function auth(req, res, next) {
   try {
     const user = readToken(req);
     if (!user) throw httpError(401, "Please log in to continue.");
     req.user = user;
     next();
   } catch (error) {
+    clearSessionCookie(res);
     next(error.status ? error : httpError(401, "Your session has expired. Please log in again."));
   }
 }
@@ -132,7 +158,8 @@ app.post("/api/auth/register", authLimiter, wrap(async (req, res) => {
   const hash = await bcrypt.hash(password, 12);
   const [result] = await pool.query("INSERT INTO users (username, email, password) VALUES (?, ?, ?)", [username, email, hash]);
   const user = { id: result.insertId, username, email };
-  res.status(201).json({ token: signToken(user), user });
+  setSessionCookie(res, user);
+  res.status(201).json({ user });
 }));
 
 app.post("/api/auth/login", authLimiter, wrap(async (req, res) => {
@@ -142,7 +169,57 @@ app.post("/api/auth/login", authLimiter, wrap(async (req, res) => {
   if (!rows.length || !(await bcrypt.compare(password, rows[0].password))) {
     throw httpError(401, "Email/username or password is incorrect.");
   }
-  res.json({ token: signToken(rows[0]), user: publicUser(rows[0]) });
+  setSessionCookie(res, rows[0]);
+  res.json({ user: publicUser(rows[0]) });
+}));
+
+app.post("/api/auth/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ message: "Logged out." });
+});
+
+app.post("/api/auth/forgot-password", authLimiter, wrap(async (req, res) => {
+  const email = text(req.body?.email, 254).toLowerCase();
+  if (!EMAIL_RE.test(email)) throw httpError(400, "Enter a valid email address.");
+  const [rows] = await pool.query("SELECT id, email FROM users WHERE email = ? LIMIT 1", [email]);
+  if (rows.length) {
+    const { token, hash } = createResetToken();
+    await pool.query("UPDATE users SET password_reset_token_hash = ?, password_reset_expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 MINUTE) WHERE id = ?", [hash, rows[0].id]);
+    if (process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
+      const resetUrl = new URL(process.env.PASSWORD_RESET_URL || "/#/reset-password", process.env.APP_BASE_URL || "http://localhost:3000");
+      const hashPath = resetUrl.hash.split("?")[0] || "#/reset-password";
+      const hashParams = new URLSearchParams(resetUrl.hash.split("?")[1] || "");
+      hashParams.set("token", token);
+      resetUrl.hash = `${hashPath}?${hashParams.toString()}`;
+      void fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: process.env.MAIL_FROM,
+          to: [rows[0].email],
+          subject: "Reset your NoAdFrame password",
+          html: `<p>Use this one-time link within 30 minutes:</p><p><a href="${resetUrl.toString()}">Reset password</a></p>`
+        })
+      }).then(delivery => {
+        if (!delivery.ok) console.error("Password reset email delivery failed:", delivery.status);
+      }).catch(error => console.error("Password reset email delivery failed:", error.message));
+    }
+  }
+  res.json({ message: "If an account exists for that email, password reset instructions will be sent." });
+}));
+
+app.post("/api/auth/reset-password", authLimiter, wrap(async (req, res) => {
+  const token = text(req.body?.token, 200);
+  const password = String(req.body?.password || "");
+  if (!token || !validPassword(password)) throw httpError(400, "Password must be at least 10 characters and include a letter and a number.");
+  const passwordHash = await bcrypt.hash(password, 12);
+  const [result] = await pool.query(
+    "UPDATE users SET password = ?, password_reset_token_hash = NULL, password_reset_expires_at = NULL WHERE password_reset_token_hash = ? AND password_reset_expires_at > UTC_TIMESTAMP()",
+    [passwordHash, hashResetToken(token)]
+  );
+  if (!result.affectedRows) throw httpError(400, "This password reset link is invalid or has expired.");
+  clearSessionCookie(res);
+  res.json({ message: "Password has been reset. You can now log in." });
 }));
 
 app.get("/api/auth/me", auth, wrap(async (req, res) => {
@@ -162,7 +239,7 @@ app.post("/api/auth/change-password", auth, authLimiter, wrap(async (req, res) =
   if (next.length < 8 || next.length > 72) throw httpError(400, "New password must be 8–72 characters.");
   const [rows] = await pool.query("SELECT password FROM users WHERE id = ?", [req.user.id]);
   if (!rows.length || !(await bcrypt.compare(current, rows[0].password))) throw httpError(401, "Current password is incorrect.");
-  await pool.query("UPDATE users SET password = ? WHERE id = ?", [await bcrypt.hash(next, 12), req.user.id]);
+  await pool.query("UPDATE users SET password = ?, password_reset_token_hash = NULL, password_reset_expires_at = NULL WHERE id = ?", [await bcrypt.hash(next, 12), req.user.id]);
   res.json({ message: "Password updated." });
 }));
 
@@ -176,23 +253,32 @@ const SORTS = {
 };
 
 app.get("/api/movies", wrap(async (req, res) => {
-  const q = text(req.query.q, 100);
+  const q = text(req.query.q ?? req.query.title, 100);
   const genre = text(req.query.genre, 50);
-  const year = parseInt(req.query.year, 10);
-  const minRating = parseFloat(req.query.minRating);
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 100);
+  const yearRaw = req.query.year;
+  const ratingRaw = req.query.minRating;
+  const year = yearRaw === undefined || yearRaw === "" ? null : Number(yearRaw);
+  const minRating = ratingRaw === undefined || ratingRaw === "" ? null : Number(ratingRaw);
+  const { page, limit } = parsePagination(req.query);
+  if (year !== null && (!Number.isInteger(year) || year < 1888 || year > 2200)) throw httpError(400, "Invalid year filter.");
+  if (minRating !== null && (!Number.isFinite(minRating) || minRating < 0 || minRating > 10)) throw httpError(400, "minRating must be between 0 and 10.");
   const where = ["1=1"];
   const params = [];
-  if (q) {
-    where.push("(m.title_en LIKE ? OR m.title_ka LIKE ? OR m.imdb_id = ?)");
-    params.push(`%${likeEscape(q)}%`, `%${likeEscape(q)}%`, q);
-  }
+  if (q) { where.push("(m.title_en LIKE ? OR m.title_ka LIKE ? OR m.imdb_id = ?)"); params.push(`%${likeEscape(q)}%`, `%${likeEscape(q)}%`, q); }
   if (genre) { where.push("m.genre LIKE ?"); params.push(`%${likeEscape(genre)}%`); }
-  if (Number.isFinite(year)) { where.push("m.release_year = ?"); params.push(year); }
-  if (Number.isFinite(minRating)) { where.push("m.imdb_rating >= ?"); params.push(minRating); }
+  if (year !== null) { where.push("m.release_year = ?"); params.push(year); }
+  if (minRating !== null) { where.push("m.imdb_rating >= ?"); params.push(minRating); }
+  const clause = where.join(" AND ");
+  const [[count]] = await pool.query(`SELECT COUNT(*) AS total FROM movies m WHERE ${clause}`, params);
+  const total = Number(count.total);
+  const totalPages = Math.ceil(total / limit);
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+  const safeOffset = (safePage - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT m.* FROM movies m WHERE ${where.join(" AND ")} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ${limit}`, params);
-  res.json({ movies: rows });
+    `SELECT m.* FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
+    [...params, limit, safeOffset]
+  );
+  res.json({ ...paginationMeta(safePage, limit, total), movies: rows });
 }));
 
 app.get("/api/movies/categories", wrap(async (_req, res) => {
@@ -357,7 +443,13 @@ app.use((err, _req, res, _next) => {
 
 (async () => {
   try {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) throw new Error("JWT_SECRET is missing or too short (use 32+ random characters).");
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) throw new Error("JWT_SECRET is missing or too short (use 32+ random characters).");
+    if (production && (!process.env.RESEND_API_KEY || !process.env.MAIL_FROM || !process.env.APP_BASE_URL)) throw new Error("Production password reset email requires RESEND_API_KEY, MAIL_FROM and APP_BASE_URL.");
+    if (production) {
+      const appUrl = new URL(process.env.APP_BASE_URL);
+      if (appUrl.protocol !== "https:") throw new Error("APP_BASE_URL must use HTTPS in production.");
+      if (process.env.PASSWORD_RESET_URL && new URL(process.env.PASSWORD_RESET_URL).protocol !== "https:") throw new Error("PASSWORD_RESET_URL must use HTTPS in production.");
+    }
     pool = createPool();
     await initSchema(pool);
     app.listen(PORT, () => console.log(`NoAdFrame server running on http://localhost:${PORT}`));

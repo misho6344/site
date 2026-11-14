@@ -1,8 +1,13 @@
 "use strict";
+try {
+  localStorage.removeItem("noadframe_token");
+  localStorage.removeItem("noadframe_user");
+} catch { /* Storage may be disabled; cookie authentication does not depend on it. */ }
 const state = {
-  token: localStorage.getItem("noadframe_token"),
-  user: JSON.parse(localStorage.getItem("noadframe_user") || "null"),
+  user: null,
   filters: { q: "", genre: "", year: "", minRating: "", sort: "newest" },
+  page: 1,
+  totalPages: 0,
   chat: []
 };
 
@@ -12,10 +17,14 @@ const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "");
 
 async function api(url, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (state.token) headers.Authorization = `Bearer ${state.token}`;
-  const response = await fetch(url, { ...options, headers });
+  const csrf = document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith("noadframe_csrf="));
+  if (csrf && !["GET", "HEAD", "OPTIONS"].includes(String(options.method || "GET").toUpperCase())) headers["X-CSRF-Token"] = decodeURIComponent(csrf.slice("noadframe_csrf=".length));
+  const response = await fetch(url, { ...options, headers, credentials: "same-origin" });
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && state.token && !url.includes("/auth/login")) setSession(null, null);
+  if (response.status === 401 && !url.includes("/auth/login") && !url.includes("/auth/register")) {
+    setSession(null);
+    if (document.querySelector('[data-view="movie"]:not([hidden])') || document.querySelector('[data-view="profile"]:not([hidden])')) route();
+  }
   if (!response.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 }
@@ -30,17 +39,18 @@ function toast(message) {
 }
 
 /* ---------- session ---------- */
-function setSession(token, user) {
-  state.token = token; state.user = user;
-  if (token) { localStorage.setItem("noadframe_token", token); localStorage.setItem("noadframe_user", JSON.stringify(user)); }
-  else { localStorage.removeItem("noadframe_token"); localStorage.removeItem("noadframe_user"); }
+function setSession(user = null) {
+  state.user = user;
   renderAuth();
+}
+async function restoreSession() {
+  try { const data = await api("/api/auth/me"); setSession(data.user); }
+  catch { setSession(null); }
 }
 function renderAuth() {
   $("guestActions").hidden = !!state.user;
   $("userActions").hidden = !state.user;
   if (state.user) $("profileLink").textContent = state.user.username;
-  if (document.querySelector('[data-view="movie"]:not([hidden])') || document.querySelector('[data-view="profile"]:not([hidden])')) route();
 }
 
 /* ---------- card helpers ---------- */
@@ -156,23 +166,49 @@ async function loadFacets() {
 async function loadCatalog() {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(state.filters)) if (v) params.set(k, v);
+  params.set("page", String(state.page)); params.set("limit", "24");
   $("movieGrid").innerHTML = `<div class="state">Loading...</div>`;
   try {
-    const { movies } = await api(`/api/movies?${params}`);
-    $("movieCount").textContent = `${movies.length} movie${movies.length === 1 ? "" : "s"}`;
-    $("movieGrid").innerHTML = movies.length ? movies.map(cardHTML).join("") : `<div class="state">No movies match your search.</div>`;
+    const data = await api(`/api/movies?${params}`);
+    state.page = data.page; state.totalPages = data.totalPages;
+    $("movieCount").textContent = `${data.total} movie${data.total === 1 ? "" : "s"}`;
+    $("movieGrid").innerHTML = data.movies.length ? data.movies.map(cardHTML).join("") : `<div class="state">No movies match your search.</div>`;
+    renderPagination();
   } catch (error) {
     $("movieGrid").innerHTML = `<div class="state">${esc(error.message)}</div>`;
+    $("pagination").innerHTML = "";
   }
 }
+function renderPagination() {
+  const root = $("pagination");
+  if (!root || state.totalPages <= 1) { if (root) root.innerHTML = ""; return; }
+  const pages = new Set([1, state.totalPages]);
+  for (let n = Math.max(1, state.page - 2); n <= Math.min(state.totalPages, state.page + 2); n++) pages.add(n);
+  const ordered = [...pages].sort((x, y) => x - y);
+  let previous = 0;
+  const buttons = ordered.map(n => {
+    const gap = previous && n - previous > 1 ? `<span class="page-gap">…</span>` : "";
+    previous = n;
+    return `${gap}<button type="button" class="page-number${n === state.page ? " active" : ""}" data-page="${n}" ${n === state.page ? 'aria-current="page"' : ""}>${n}</button>`;
+  }).join("");
+  root.innerHTML = `<button type="button" class="btn ghost small" data-page="${state.page - 1}" ${state.page <= 1 ? "disabled" : ""}>Previous</button>${buttons}<button type="button" class="btn ghost small" data-page="${state.page + 1}" ${state.page >= state.totalPages ? "disabled" : ""}>Next</button>`;
+}
+$("pagination").addEventListener("click", e => {
+  const button = e.target.closest("[data-page]");
+  if (!button || button.disabled) return;
+  state.page = Number(button.dataset.page);
+  loadCatalog();
+});
 function applyFilters(partial, { navigate = true } = {}) {
   Object.assign(state.filters, partial);
+  state.page = 1;
   if (navigate && location.hash !== "#/movies") location.hash = "#/movies";
   else if (!document.querySelector('[data-view="movies"]').hidden) { $("searchInput").value = state.filters.q; loadCatalog(); }
 }
 $("filters").addEventListener("change", () => applyFilters({ genre: $("fGenre").value, year: $("fYear").value, minRating: $("fRating").value, sort: $("fSort").value }, { navigate: false }));
 $("fReset").addEventListener("click", () => {
   state.filters = { q: "", genre: "", year: "", minRating: "", sort: "newest" };
+  state.page = 1;
   showMovies();
 });
 $("searchForm").addEventListener("submit", e => { e.preventDefault(); applyFilters({ q: $("searchInput").value.trim() }); });
@@ -197,7 +233,7 @@ $("genreGrid").addEventListener("click", e => {
 });
 $("homeRows").addEventListener("click", e => {
   const link = e.target.closest("[data-sort]");
-  if (link) { state.filters = { q: "", genre: "", year: "", minRating: "", sort: link.dataset.sort }; }
+  if (link) { state.filters = { q: "", genre: "", year: "", minRating: "", sort: link.dataset.sort }; state.page = 1; }
 });
 
 /* ---------- movie page ---------- */
@@ -380,6 +416,7 @@ function route() {
   if (parts[0] === "movies") view = "movies";
   else if (parts[0] === "genres") view = "genres";
   else if (parts[0] === "about") view = "about";
+  else if (parts[0] === "reset-password") view = "reset-password";
   else if (parts[0] === "profile") view = "profile";
   else if (parts[0] === "movie" && /^\d+$/.test(parts[1] || "")) view = "movie";
   document.querySelectorAll(".view").forEach(el => { el.hidden = el.dataset.view !== view; });
@@ -391,6 +428,7 @@ function route() {
   else if (view === "genres") showGenres();
   else if (view === "profile") showProfile();
   else if (view === "movie") showMovie(parts[1], parts[2] === "play");
+  else if (view === "reset-password") showResetPassword();
   if (view !== "movies" && view !== "movie") $("searchInput").value = state.filters.q;
 }
 window.addEventListener("hashchange", route);
@@ -423,14 +461,35 @@ async function submitAuth(event, endpoint, welcome) {
   button.disabled = true;
   try {
     const data = await api(endpoint, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
-    setSession(data.token, data.user);
+    setSession(data.user);
+    if (document.querySelector('[data-view="movie"]:not([hidden])') || document.querySelector('[data-view="profile"]:not([hidden])')) route();
     event.target.reset(); closeAuth(); toast(welcome);
   } catch (error) { $("authMessage").textContent = error.message; }
   finally { button.disabled = false; }
 }
 $("loginForm").addEventListener("submit", e => submitAuth(e, "/api/auth/login", "Welcome back!"));
 $("registerForm").addEventListener("submit", e => submitAuth(e, "/api/auth/register", "Your account is ready."));
-$("logoutBtn").addEventListener("click", () => { setSession(null, null); toast("You have logged out."); if (location.hash.startsWith("#/profile")) location.hash = "#/"; });
+$("forgotOpen").addEventListener("click", () => { $("forgotForm").hidden = !$("forgotForm").hidden; });
+$("forgotForm").addEventListener("submit", async e => {
+  e.preventDefault(); const message = $("forgotMessage");
+  try { const data = await api("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email: new FormData(e.target).get("email") }) }); message.textContent = data.message; }
+  catch (error) { message.textContent = error.message; }
+});
+function showResetPassword() {
+  const token = new URLSearchParams(location.search).get("token") || new URLSearchParams(location.hash.split("?")[1] || "").get("token") || "";
+  $("resetToken").value = token;
+  $("resetView").hidden = false;
+  $("resetMessage").textContent = token ? "Choose a new password." : "Reset link is missing or invalid.";
+}
+$("resetForm").addEventListener("submit", async e => {
+  e.preventDefault(); const message = $("resetMessage");
+  try { const data = await api("/api/auth/reset-password", { method: "POST", body: JSON.stringify({ token: $("resetToken").value, password: e.target.password.value }) }); message.textContent = data.message; e.target.reset(); }
+  catch (error) { message.textContent = error.message; }
+});
+$("logoutBtn").addEventListener("click", async () => {
+  try { await api("/api/auth/logout", { method: "POST" }); }
+  finally { setSession(null); toast("You have logged out."); if (location.hash.startsWith("#/profile")) location.hash = "#/"; }
+});
 
 /* ---------- AI assistant ---------- */
 function addBubble(role, content) {
@@ -465,4 +524,4 @@ $("chatForm").addEventListener("submit", e => {
 $("chatChips").addEventListener("click", e => { if (e.target.tagName === "BUTTON") sendChat(e.target.textContent); });
 
 renderAuth();
-route();
+restoreSession().finally(route);
