@@ -66,6 +66,7 @@ cp .env.example .env      # Windows: copy .env.example .env
 | `OPENAI_API_KEY` | OpenAI გასაღები — AI ასისტენტისთვის |
 | `OPENAI_MODEL` | მოდელი (ნაგულისხმევი `gpt-4.1-mini`) |
 | `ADMIN_EMAIL` | იმ ანგარიშის ელფოსტა, რომელსაც ფილმების დამატება/წაშლა შეუძლია |
+| `NODE_ENV` | production-ზე დააყენეთ `production` — Secure cookie-ებისა და production შემოწმებებისთვის |
 | `RESEND_API_KEY` | Resend API key პაროლის აღდგენის წერილებისთვის (production-ში სავალდებულოა) |
 | `MAIL_FROM` | დადასტურებული გამომგზავნის მისამართი Resend-ში |
 | `APP_BASE_URL` | საიტის სრული HTTPS მისამართი reset ბმულისთვის (production-ში სავალდებულოა) |
@@ -132,7 +133,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
 
 1. ატვირთეთ პროექტი GitHub-ზე (`.env` გარეშე).
 2. https://render.com → **New → Web Service** → აირჩიეთ რეპოზიტორია.
-3. Runtime: Node. Build command: `npm install`. Start command: `npm start`.
+3. Runtime: Node. Build command: `npm ci`. Start command: `npm start`.
 4. **Environment** განყოფილებაში დაამატეთ `.env`-ის ცვლადები, მათ შორის `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `OMDB_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM` და `APP_BASE_URL`.
 5. TiDB Cloud-ში, თუ IP allowlist გაქვთ ჩართული, დაუშვით Render-ის გამავალი IP-ები (ან გახსენით წვდომა სატესტოდ).
 6. Deploy-ის შემდეგ გაუშვით seed ერთხელ ლოკალურად (იმავე `DATABASE_URL`-ით) ან გამოიყენეთ Admin API.
@@ -147,6 +148,8 @@ curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
 | GET | `/api/health` | საჯარო |
 | POST | `/api/auth/register`, `/api/auth/login` | საჯარო |
 | GET | `/api/auth/me` | HttpOnly session cookie |
+| POST | `/api/auth/logout` | cookie session + CSRF |
+| POST | `/api/auth/forgot-password`, `/api/auth/reset-password` | საჯარო (rate-limited) |
 | POST | `/api/auth/change-password` | cookie session + CSRF |
 | GET | `/api/movies?q=&title=&genre=&year=&minRating=&sort=&page=&limit=` | საჯარო; აბრუნებს `page`, `limit`, `total`, `totalPages`, `movies` |
 | GET | `/api/movies/categories` | საჯარო |
