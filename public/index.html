@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+Georgian:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=mobile-cache-upcoming-1">
 </head>
 <body>
   <div class="site-bg" aria-hidden="true"><div class="rain"></div></div>
@@ -47,7 +47,6 @@
       <div id="hero"></div>
       <div id="homeRows" class="rows"></div>
     </section>
-
     <section class="view page" data-view="movies" hidden>
       <div class="page-head"><h1>Movies</h1><span id="movieCount" class="count"></span></div>
       <form class="filters" id="filters">
@@ -59,12 +58,10 @@
       </form>
       <div id="movieGrid" class="grid"></div>
     </section>
-
     <section class="view page" data-view="genres" hidden>
       <div class="page-head"><h1>Genres</h1></div>
       <div id="genreGrid" class="genre-grid"></div>
     </section>
-
     <section class="view page narrow" data-view="about" hidden>
       <div class="about">
         <img src="/assets/logo.png" alt="" width="120" height="120">
@@ -78,9 +75,7 @@
         </ul>
       </div>
     </section>
-
     <section class="view page" data-view="movie" hidden><div id="movieView"></div></section>
-
     <section class="view page narrow" data-view="profile" hidden><div id="profileView"></div></section>
   </main>
 
@@ -114,7 +109,7 @@
   <aside class="chat-panel" id="chatPanel" aria-label="NoAdFrame AI Assistant">
     <div class="chat-head">
       <img class="avatar" src="/assets/logo.png" alt="" width="36" height="36">
-      <div><b>NoAdFrame AI Assistant</b><span><i></i> Movies, site help & feedback</span></div>
+      <div><b>NoAdFrame AI Assistant</b><span><i></i> Movies, site help &amp; feedback</span></div>
       <button id="chatClose" aria-label="Close assistant">×</button>
     </div>
     <div class="chat-messages" id="chatMessages" aria-live="polite">
@@ -132,6 +127,8 @@
   </aside>
   <button class="chat-launcher" id="chatLauncher" type="button"><img src="/assets/logo.png" alt="" width="26" height="26"><b>Ask AI</b></button>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js"></script>
+  <script src="/cache.js?v=1"></script>
+  <script src="/app.js?v=mobile-cache-upcoming-1"></script>
+  <script src="/upcoming.js?v=1"></script>
 </body>
 </html>

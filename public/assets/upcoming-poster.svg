@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" role="img" aria-label="Illustrative upcoming movie placeholder poster">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8c00"/><stop offset=".48" stop-color="#542b38"/><stop offset="1" stop-color="#10131c"/></linearGradient>
+    <radialGradient id="r"><stop stop-color="#ffd07c" stop-opacity=".82"/><stop offset="1" stop-color="#ff8c00" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="400" height="600" fill="#090a0d"/><rect width="400" height="600" fill="url(#g)" opacity=".55"/>
+  <circle cx="270" cy="205" r="170" fill="url(#r)"/>
+  <path d="M0 465 112 328l74 74 75-112 139 175v135H0Z" fill="#0a0c12" opacity=".9"/>
+  <path d="M0 510 104 421l54 45 93-106 149 149v91H0Z" fill="#111722" opacity=".9"/>
+  <text x="200" y="548" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="21" font-weight="700" letter-spacing="4">COMING SOON</text>
+  <text x="200" y="578" text-anchor="middle" fill="#ffb044" font-family="Arial,sans-serif" font-size="11" letter-spacing="3">DEMO ARTWORK</text>
+</svg>
