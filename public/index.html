@@ -11,9 +11,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+Georgian:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=auth-pagination-reset-1">
+  <link rel="stylesheet" href="/styles.css?v=mobile-loader-chat-fullscreen-2">
 </head>
 <body>
+  <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
+    <div class="boot-content">
+      <img src="/assets/logo.png" alt="" width="54" height="54">
+      <span class="boot-title">NoAdFrame</span>
+      <span class="boot-spinner" aria-hidden="true"></span>
+      <p>Loading your cinema...</p>
+    </div>
+  </div>
+  <noscript><style>.boot-screen{display:none!important}</style></noscript>
   <div class="site-bg" aria-hidden="true"><div class="rain"></div></div>
   <header class="topbar">
     <a class="brand" href="#/" aria-label="NoAdFrame home">
@@ -139,7 +148,7 @@
   <button class="chat-launcher" id="chatLauncher" type="button"><img src="/assets/logo.png" alt="" width="26" height="26"><b>Ask AI</b></button>
   <div class="toast" id="toast" role="status"></div>
   <script src="/cache.js?v=2"></script>
-  <script src="/app.js?v=auth-pagination-reset-1"></script>
+  <script src="/app.js?v=mobile-loader-chat-fullscreen-2"></script>
   <script src="/upcoming.js?v=1"></script>
 </body>
 </html>
