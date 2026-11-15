@@ -360,6 +360,7 @@ async function showMovie(id, autoplay) {
             <div><span>Cast</span><b>${esc(m.actors || "—")}</b></div>
           </div>
           <p class="desc">${esc(m.description || "No description available.")}</p>
+          ${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length ? `<div class="rights-credit"><strong>Content credits</strong><p>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).map(esc).join("<br>")}</p>${m.video_license_url ? `<a href="${esc(safeUrl(m.video_license_url))}" target="_blank" rel="noopener noreferrer">Video licence</a>` : ""}</div>` : ""}
           <button class="btn solid" id="watchBtn" type="button">▶ Watch Movie</button>
         </div>
       </div>
