@@ -9,8 +9,8 @@ const T = [
   ["tt14849194","ჩარჩენილები","The Holdovers",2023,"Comedy, Drama","Alexander Payne","Paul Giamatti, Da'Vine Joy Randolph, Dominic Sessa","https://archive.org/details/the.-holdovers.-2023.1080p.-webrip.-1600-mb.-dd-5.1.x-264-galaxy-rg-ge-dubbed"],
   ["tt0017136", "მეტროპოლისი", "Metropolis", 1927, "Drama, Sci-Fi", "Fritz Lang", "Alfred Abel, Brigitte Helm, Gustav Fröhlich", null],
   ["tt0013442", "ნოსფერატუ", "Nosferatu", 1922, "Fantasy, Horror", "F.W. Murnau", "Max Schreck, Greta Schröder", null],
-  ["tt1727587", "სინტელი", "Sintel", 2010, "Animation, Fantasy", "Colin Levy", "Halina Reijn, Thom Hoffman", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"],
-  ["tt1254207", "დიდი ბაკ ბანი", "Big Buck Bunny", 2008, "Animation, Comedy", "Sacha Goedegebure", "Jan Morgenstern", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"],
+  ["tt1727587", "სინტელი", "Sintel", 2010, "Animation, Fantasy", "Colin Levy", "Halina Reijn, Thom Hoffman", null],
+  ["tt1254207", "დიდი ბაკ ბანი", "Big Buck Bunny", 2008, "Animation, Comedy", "Sacha Goedegebure", "Jan Morgenstern",null],
   ["tt0056923", "შარადა", "Charade", 1963, "Comedy, Crime, Mystery", "Stanley Donen", "Cary Grant, Audrey Hepburn", null],
   ["tt0017925", "გენერალი", "The General", 1926, "Action, Comedy", "Clyde Bruckman, Buster Keaton", "Buster Keaton, Marion Mack", null]
 ];
