@@ -338,7 +338,8 @@ app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
        CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
        CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
        CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
-       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description
+       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description,
+       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' THEN 1 ELSE 0 END AS has_video_source
      FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
     [...params, limit, safeOffset]
   );
@@ -351,14 +352,15 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
        CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
        CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
        CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
-       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description
+       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description,
+       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' THEN 1 ELSE 0 END AS has_video_source
      FROM movies m ORDER BY ${order} LIMIT 12`
   ).then(([rows]) => rows);
   const [popular, topRated, newReleases, [featuredRows]] = await Promise.all([
     run("m.views DESC, m.imdb_rating DESC"),
     run("m.imdb_rating DESC, m.views DESC"),
     run("m.release_year DESC, m.created_at DESC"),
-    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
+    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
   res.json({ featured: featuredRows, popular, topRated, newReleases });
 }));
