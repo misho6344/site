@@ -389,7 +389,7 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
     run("m.views DESC, m.imdb_rating DESC"),
     run("m.imdb_rating DESC, m.views DESC"),
     run("m.release_year DESC, m.created_at DESC"),
-    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
+    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' AND video_rights_basis IS NOT NULL THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
   res.json({ featured: suppressRetiredVideos(featuredRows), popular: suppressRetiredVideos(popular), topRated: suppressRetiredVideos(topRated), newReleases: suppressRetiredVideos(newReleases) });
 }));
