@@ -348,6 +348,7 @@ function embedFor(url) {
 
 const archiveVideoRequests = new Map();
 const archiveVideoUrls = new Map();
+const archiveVideoErrors = new Map();
 
 function isMobilePlayer() {
   return window.matchMedia("(max-width: 700px), (pointer: coarse)").matches;
@@ -356,17 +357,44 @@ function isMobilePlayer() {
 function resolveArchiveVideo(identifier) {
   if (archiveVideoUrls.has(identifier)) return Promise.resolve(archiveVideoUrls.get(identifier));
   if (!archiveVideoRequests.has(identifier)) {
-    const request = api(`/api/archive-video?identifier=${encodeURIComponent(identifier)}`)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const request = api(`/api/archive-video?identifier=${encodeURIComponent(identifier)}`, { signal: controller.signal })
       .then(data => {
         const url = safeUrl(data.videoUrl);
-        if (url) archiveVideoUrls.set(identifier, url);
+        if (url) {
+          archiveVideoUrls.set(identifier, url);
+          archiveVideoErrors.delete(identifier);
+        } else {
+          archiveVideoErrors.set(identifier, "The source did not provide a playable video file.");
+        }
         return url;
       })
-      .catch(() => null)
-      .finally(() => archiveVideoRequests.delete(identifier));
+      .catch(error => {
+        archiveVideoErrors.set(identifier, error.name === "AbortError"
+          ? "Archive.org did not respond in time."
+          : error.message || "The video source could not be loaded.");
+        return null;
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        archiveVideoRequests.delete(identifier);
+      });
     archiveVideoRequests.set(identifier, request);
   }
   return archiveVideoRequests.get(identifier);
+}
+
+function showArchiveVideoError(box, movie, identifier, message) {
+  const sourceUrl = `https://archive.org/details/${encodeURIComponent(identifier || "")}`;
+  box.innerHTML = `<div class="player-note player-error">
+    <div>
+      <h3>ვიდეო ვერ გაეშვა</h3>
+      <p>${esc(message || "ვიდეოფაილი ვერ ჩაიტვირთა ან ტელეფონის ბრაუზერი მის კოდეკს ვერ კითხულობს.")}</p>
+      <a class="btn ghost" href="${esc(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source on Archive.org</a>
+    </div>
+  </div>`;
+  if (isMobilePlayer()) addMobilePlayerFullscreen(box);
 }
 
 function warmArchiveVideoSources(movies, maxCount = 3) {
@@ -450,7 +478,16 @@ function startVideoPlayback(box, video) {
   try {
     const playback = video.play();
     if (playback && typeof playback.catch === "function") {
-      playback.catch(() => {
+      playback.catch(error => {
+        if (error?.name === "NotSupportedError" || video.error) {
+          showArchiveVideoError(
+            box,
+            currentMovie || { title_en: "Video" },
+            video.dataset.archiveId || "",
+            "ტელეფონის ბრაუზერი ამ ვიდეოფორმატს ვერ უკრავს. წყაროში უნდა არსებობდეს H.264 ვერსია."
+          );
+          return;
+        }
         showPlayerStartControl(box, video);
         toast("Tap the play control to start the video.");
       });
@@ -471,12 +508,18 @@ function renderPlayerSource(box, movie, source, { userInitiated = false, delayed
 
   const video = box.querySelector("video");
   if (video) {
-    // Some Archive.org MP4 files are HEVC/H.265. Many mobile browsers cannot
-    // decode them, so switch to Archive.org's browser player when native playback fails.
-    if (source.fallbackSrc) {
+    if (source.archiveId) video.dataset.archiveId = source.archiveId;
+    // Do not replace an unsupported video with an Archive iframe that can
+    // remain on an endless spinner. Show the actual playback failure instead.
+    if (source.archiveId) {
       video.addEventListener("error", () => {
         if (!box.contains(video)) return;
-        renderPlayerSource(box, movie, { type: "iframe", src: source.fallbackSrc }, { delayed: true });
+        showArchiveVideoError(
+          box,
+          movie,
+          source.archiveId,
+          "ვიდეოფაილი ვერ ჩაიტვირთა. შესაძლოა მისი კოდეკი ტელეფონის ბრაუზერს არ უჭერდეს მხარს."
+        );
       }, { once: true });
     }
     const resumeAt = playbackPositions.get(String(movie.id));
@@ -518,7 +561,7 @@ function mountPlayer({ userInitiated = false } = {}) {
   if (embed.type === "archive") {
     const cachedUrl = archiveVideoUrls.get(embed.identifier);
     if (cachedUrl) {
-      renderPlayerSource(box, movie, { type: "video", src: cachedUrl, fallbackSrc: embed.fallbackSrc }, { userInitiated });
+      renderPlayerSource(box, movie, { type: "video", src: cachedUrl, archiveId: embed.identifier }, { userInitiated });
       return;
     }
 
@@ -530,15 +573,17 @@ function mountPlayer({ userInitiated = false } = {}) {
     resolveArchiveVideo(embed.identifier).then(videoUrl => {
       if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
       if (videoUrl) {
-        renderPlayerSource(box, movie, { type: "video", src: videoUrl, fallbackSrc: embed.fallbackSrc }, {
+        renderPlayerSource(box, movie, { type: "video", src: videoUrl, archiveId: embed.identifier }, {
           userInitiated,
           delayed: true
         });
       } else {
-        renderPlayerSource(box, movie, { type: "iframe", src: embed.fallbackSrc }, {
-          userInitiated,
-          delayed: true
-        });
+        showArchiveVideoError(
+          box,
+          movie,
+          embed.identifier,
+          archiveVideoErrors.get(embed.identifier) || "Archive.org-ს ამ ჩანაწერში ტელეფონთან თავსებადი ვიდეოფაილი არ დაუბრუნებია."
+        );
       }
     });
     return;
