@@ -244,3 +244,23 @@ NoAdFrame must not host, embed, stream, or publicly display a film, poster, back
 - Never treat “public domain” as global without checking the relevant country, publication history, restoration/score/translation rights and term. A public-domain film may still have a separately protected soundtrack, restoration, poster, or Georgian dub.
 
 The copyright policy page is informational and is not legal advice. The operator should have a Georgian lawyer review the policy, notice workflow, privacy handling and all licences before enabling public streaming.
+
+## პლატფორმები და სერვისები
+
+- [GitHub](https://github.com/)
+- [Render](https://render.com/)
+- [Enzonic](https://enzonic.com/)
+- [Upstash](https://upstash.com/)
+- [Cloudflare](https://www.cloudflare.com/)
+- [Resend](https://resend.com/)
+- [OMDb API](https://www.omdbapi.com/)
+- [OpenAI Platform](https://platform.openai.com/)
+- [Internet Archive](https://archive.org/)
+- [Google Fonts](https://fonts.google.com/)
+
+## პროგრამირების ენები
+
+- JavaScript
+- HTML
+- CSS
+- SQL
