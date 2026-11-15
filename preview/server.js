@@ -35,7 +35,7 @@ const badge = `<div style="position:fixed;left:14px;bottom:14px;z-index:99;paddi
 http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x"), p = u.pathname, host = req.headers.host, all = movies(host);
   const withCount = (list) => list;
-  if (p.startsWith("/preview-img/")) { res.writeHead(200, { "Content-Type": "image/jpeg" }); return fs.createReadStream(path.join(IMG, path.basename(p))).pipe(res); }
+  if (p.startsWith("/preview-img/") || p.startsWith("/images/")) { res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=604800" }); return fs.createReadStream(path.join(IMG, path.basename(p))).pipe(res); }
   if (p === "/api/health") return json(res, { status: "preview" });
   if (p === "/api/archive-video") {
     const identifier = u.searchParams.get("identifier") || "";
