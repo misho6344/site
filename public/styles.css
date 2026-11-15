@@ -422,3 +422,24 @@ body.player-open{overflow:hidden!important;overscroll-behavior:none}
 }
 .player-loading p{margin:0;color:rgba(255,255,255,.72);font-size:14px}
 @keyframes player-spin{to{transform:rotate(360deg)}}
+
+
+/* Hide site chrome while a movie is playing; restore it when the player closes. */
+body.player-open .topbar,
+body.player-open .chat-launcher,
+body.player-open .chat-panel{
+  display:none!important;
+}
+
+/* Distribute desktop navigation links evenly through the available header width. */
+@media(min-width:701px){
+  .topbar{gap:clamp(18px,2.4vw,36px)}
+  .main-nav{
+    flex:1 1 auto;
+    min-width:0;
+    justify-content:space-evenly;
+    gap:clamp(8px,1.2vw,22px);
+  }
+  .main-nav a{padding-inline:clamp(8px,1.1vw,16px);white-space:nowrap}
+  .header-actions{flex:0 0 auto;margin-left:0}
+}
