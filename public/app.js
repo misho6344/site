@@ -275,14 +275,31 @@ function embedFor(url) {
   return null;
 }
 
+function requestMobilePlayerFullscreen(box, media) {
+  if (!window.matchMedia("(max-width: 700px), (pointer: coarse)").matches) return;
+
+  // iPhone Safari exposes a native video fullscreen method. Removing playsinline
+  // below also lets iOS use its native fullscreen playback behavior.
+  if (media && typeof media.webkitEnterFullscreen === "function") {
+    try { media.webkitEnterFullscreen(); return; } catch { /* try the container API */ }
+  }
+
+  const request = box.requestFullscreen || box.webkitRequestFullscreen;
+  if (typeof request !== "function") return;
+  try {
+    const result = request.call(box);
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch { /* the browser may deny fullscreen; native player controls remain available */ }
+}
+
 function mountPlayer() {
   const box = $("player");
   const url = currentMovie && safeUrl(currentMovie.video_url);
   const embed = url && embedFor(url);
   if (!embed) { box.innerHTML = `<div class="player-note"><p>${url ? "This video source is not supported by the player." : "Video is not available for this title yet."}</p></div>`; return; }
   box.innerHTML = embed.type === "video"
-    ? `<video controls autoplay playsinline src="${esc(embed.src)}"></video>`
-    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"></iframe>`;
+    ? `<video controls autoplay src="${esc(embed.src)}"></video>`
+    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"></iframe>`;
   const video = box.querySelector("video");
   if (video) {
     const resumeAt = playbackPositions.get(String(currentMovie.id));
@@ -294,6 +311,13 @@ function mountPlayer() {
     video.addEventListener("timeupdate", () => {
       if (Number.isFinite(video.currentTime)) playbackPositions.set(String(currentMovie.id), video.currentTime);
     });
+    try {
+      const playback = video.play();
+      if (playback && typeof playback.catch === "function") playback.catch(() => {});
+    } catch { /* playback can still be started from the native controls */ }
+    requestMobilePlayerFullscreen(box, video);
+  } else {
+    requestMobilePlayerFullscreen(box, box.querySelector("iframe"));
   }
   box.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -409,7 +433,17 @@ async function showProfile() {
 }
 
 /* ---------- router ---------- */
-function route() {
+let bootScreenDismissed = false;
+function dismissBootScreen() {
+  if (bootScreenDismissed) return;
+  bootScreenDismissed = true;
+  const screen = $("bootScreen");
+  if (!screen) return;
+  screen.classList.add("is-hidden");
+  window.setTimeout(() => { screen.hidden = true; }, 260);
+}
+
+async function route() {
   stopActivePlayback();
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
   let view = "home";
@@ -423,13 +457,17 @@ function route() {
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("active", a.dataset.nav === (view === "movie" ? "movies" : view)));
   document.title = "NoAdFrame — Watch. Enjoy. No Ads.";
   window.scrollTo(0, 0);
-  if (view === "home") showHome();
-  else if (view === "movies") showMovies();
-  else if (view === "genres") showGenres();
-  else if (view === "profile") showProfile();
-  else if (view === "movie") showMovie(parts[1], parts[2] === "play");
-  else if (view === "reset-password") showResetPassword();
   if (view !== "movies" && view !== "movie") $("searchInput").value = state.filters.q;
+  try {
+    if (view === "home") await showHome();
+    else if (view === "movies") await showMovies();
+    else if (view === "genres") await showGenres();
+    else if (view === "profile") await showProfile();
+    else if (view === "movie") await showMovie(parts[1], parts[2] === "play");
+    else if (view === "reset-password") showResetPassword();
+  } finally {
+    dismissBootScreen();
+  }
 }
 window.addEventListener("hashchange", route);
 window.addEventListener("pagehide", stopActivePlayback);
@@ -524,4 +562,4 @@ $("chatForm").addEventListener("submit", e => {
 $("chatChips").addEventListener("click", e => { if (e.target.tagName === "BUTTON") sendChat(e.target.textContent); });
 
 renderAuth();
-restoreSession().finally(route);
+restoreSession().finally(() => { route(); });
