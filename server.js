@@ -11,14 +11,12 @@ const crypto = require("crypto");
 const { UpstashRateLimitStore } = require("./lib/upstash-rate-limit-store");
 const { parsePagination, paginationMeta } = require("./lib/pagination");
 const { SESSION_COOKIE, CSRF_COOKIE, cookieOptions, parseCookies, createResetToken, hashResetToken, csrfMatches, validPassword } = require("./lib/auth-security");
-const OpenAI = require("openai").default || require("openai");
 const { createPool, initSchema } = require("./lib/db");
 const { upsertMovie, httpError } = require("./lib/movies");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 let pool;
-let openai;
 const production = process.env.NODE_ENV === "production";
 const trustProxyHops = process.env.TRUST_PROXY_HOPS === undefined
   ? (production ? 1 : 0)
@@ -541,11 +539,15 @@ ${catalog || "(the catalog is currently empty)"}`;
 app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res) => {
   const message = text(req.body?.message, 1500);
   if (!message) throw httpError(400, "Message must contain 1–1500 characters.");
-  if (!process.env.OPENAI_API_KEY) throw httpError(503, "The AI assistant is not configured yet.");
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw httpError(503, "The AI assistant is not configured yet. Add GEMINI_API_KEY in the server environment.");
 
   const history = (Array.isArray(req.body?.history) ? req.body.history : [])
     .filter(m => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string")
-    .slice(-8).map(m => ({ role: m.role, content: m.content.slice(0, 1500) }));
+    .slice(-8).map(m => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content.slice(0, 1500) }]
+    }));
 
   const [movies] = await pool.query(
     "SELECT title_en, title_ka, release_year, imdb_rating, genre FROM movies ORDER BY imdb_rating DESC LIMIT 60");
@@ -553,26 +555,63 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
 
   let result = { type: "off_topic", reply: OFF_TOPIC_REPLY };
   try {
-    if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      messages: [{ role: "system", content: buildSystemPrompt(catalog) }, ...history, { role: "user", content: message }],
-      response_format: { type: "json_object" },
-      max_tokens: 450,
-      temperature: 0.4
-    });
+    const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(20000),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: buildSystemPrompt(catalog) }] },
+          contents: [
+            ...history,
+            { role: "user", parts: [{ text: message }] }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: 450,
+            temperature: 0.4
+          }
+        })
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const providerMessage = payload.error?.message || "Unknown Gemini API error";
+      console.error("Gemini API error:", response.status, providerMessage);
+      if (response.status === 429) {
+        throw httpError(429, "Gemini-ის უფასო ლიმიტი ამოიწურა. გთხოვთ, მოგვიანებით სცადოთ.");
+      }
+      if ([400, 401, 403].includes(response.status)) {
+        throw httpError(503, "Gemini API key ან API-ის კონფიგურაცია შესამოწმებელია.");
+      }
+      throw httpError(502, "Gemini დროებით მიუწვდომელია. გთხოვთ, მოგვიანებით სცადოთ.");
+    }
+
+    const generatedText = payload.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("")
+      .trim();
+    if (!generatedText) {
+      console.error("Gemini returned no text:", payload.promptFeedback?.blockReason || "empty response");
+      throw httpError(502, "Gemini-მა პასუხი ვერ დააბრუნა. გთხოვთ, კითხვა თავიდან სცადოთ.");
+    }
+
     try {
-      const parsed = JSON.parse(completion.choices[0]?.message?.content || "{}");
+      const parsed = JSON.parse(generatedText);
       const type = ["movie", "site", "support", "feedback", "off_topic"].includes(parsed.type) ? parsed.type : "support";
       result = type === "off_topic" || !parsed.reply
         ? { type: "off_topic", reply: OFF_TOPIC_REPLY }
         : { type, reply: String(parsed.reply).slice(0, 1500) };
     } catch {
+      console.error("Gemini returned invalid JSON.");
       result = { type: "support", reply: "Sorry, I couldn't prepare an answer. Please rephrase your question about NoAdFrame." };
     }
   } catch (error) {
-    console.error("OpenAI error:", error.message);
-    throw httpError(502, "The assistant is temporarily unavailable.");
+    if (error.status) throw error;
+    console.error("Gemini request failed:", error.message);
+    throw httpError(502, "Gemini დროებით მიუწვდომელია. გთხოვთ, მოგვიანებით სცადოთ.");
   }
 
   if (result.type === "feedback") {
