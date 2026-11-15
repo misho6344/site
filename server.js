@@ -134,6 +134,11 @@ const text = (value, max) => String(value ?? "").trim().slice(0, max);
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{3,30}$/u;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const likeEscape = (s) => s.replace(/[\%_]/g, "\$&");
+const requireNumericId = (req) => {
+  const id = String(req.params.id || "");
+  if (!/^[1-9]\d*$/.test(id)) throw httpError(400, "Invalid ID.");
+  return id;
+};
 
 const RETIRED_VIDEO_IMDB_IDS = new Set();
 
@@ -345,8 +350,9 @@ app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
        CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
        CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
        CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
+       m.video_url AS source_url,
        CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description,
-       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' THEN 1 ELSE 0 END AS has_video_source
+       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' AND m.video_rights_basis IS NOT NULL THEN 1 ELSE 0 END AS has_video_source
      FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
     [...params, limit, safeOffset]
   );
@@ -359,15 +365,16 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
        CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
        CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
        CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
+       m.video_url AS source_url,
        CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description,
-       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' THEN 1 ELSE 0 END AS has_video_source
+       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' AND m.video_rights_basis IS NOT NULL THEN 1 ELSE 0 END AS has_video_source
      FROM movies m ORDER BY ${order} LIMIT 12`
   ).then(([rows]) => rows);
   const [popular, topRated, newReleases, [featuredRows]] = await Promise.all([
     run("m.views DESC, m.imdb_rating DESC"),
     run("m.imdb_rating DESC, m.views DESC"),
     run("m.release_year DESC, m.created_at DESC"),
-    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
+    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
   res.json({ featured: suppressRetiredVideos(featuredRows), popular: suppressRetiredVideos(popular), topRated: suppressRetiredVideos(topRated), newReleases: suppressRetiredVideos(newReleases) });
 }));
@@ -386,37 +393,41 @@ app.get("/api/genres", wrap(async (_req, res) => {
   });
 }));
 
-app.get("/api/movies/:id(\d+)", wrap(async (req, res) => {
-  const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [req.params.id]);
+app.get("/api/movies/:id", wrap(async (req, res) => {
+  const id = requireNumericId(req);
+  const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [id]);
   if (!rows.length) throw httpError(404, "Movie not found.");
-  pool.query("UPDATE movies SET views = views + 1 WHERE id = ?", [req.params.id]).catch(() => {});
+  pool.query("UPDATE movies SET views = views + 1 WHERE id = ?", [id]).catch(() => {});
   res.json({ movie: suppressRetiredVideos(rows)[0] });
 }));
 
 /* ---------- comments ---------- */
-app.get("/api/movies/:id(\d+)/comments", wrap(async (req, res) => {
+app.get("/api/movies/:id/comments", wrap(async (req, res) => {
+  const id = requireNumericId(req);
   const order = req.query.sort === "oldest" ? "ASC" : "DESC";
   const [rows] = await pool.query(
     `SELECT c.id, c.comment, c.created_at, c.user_id, u.username AS author
      FROM comments c JOIN users u ON u.id = c.user_id
-     WHERE c.movie_id = ? ORDER BY c.created_at ${order}, c.id ${order}`, [req.params.id]);
+     WHERE c.movie_id = ? ORDER BY c.created_at ${order}, c.id ${order}`, [id]);
   res.json({ comments: rows });
 }));
 
-app.post("/api/movies/:id(\d+)/comments", auth, commentLimiter, wrap(async (req, res) => {
+app.post("/api/movies/:id/comments", auth, commentLimiter, wrap(async (req, res) => {
+  const id = requireNumericId(req);
   const comment = text(req.body?.comment ?? req.body?.body, 1200);
   if (!comment) throw httpError(400, "Comment must contain 1–1200 characters.");
-  const [movie] = await pool.query("SELECT id FROM movies WHERE id = ?", [req.params.id]);
+  const [movie] = await pool.query("SELECT id FROM movies WHERE id = ?", [id]);
   if (!movie.length) throw httpError(404, "Movie not found.");
-  const [result] = await pool.query("INSERT INTO comments (movie_id, user_id, comment) VALUES (?, ?, ?)", [req.params.id, req.user.id, comment]);
+  const [result] = await pool.query("INSERT INTO comments (movie_id, user_id, comment) VALUES (?, ?, ?)", [id, req.user.id, comment]);
   res.status(201).json({ id: result.insertId, message: "Comment posted." });
 }));
 
-app.delete("/api/comments/:id(\d+)", auth, wrap(async (req, res) => {
-  const [rows] = await pool.query("SELECT user_id FROM comments WHERE id = ?", [req.params.id]);
+app.delete("/api/comments/:id", auth, wrap(async (req, res) => {
+  const id = requireNumericId(req);
+  const [rows] = await pool.query("SELECT user_id FROM comments WHERE id = ?", [id]);
   if (!rows.length) throw httpError(404, "Comment not found.");
   if (rows[0].user_id !== req.user.id && !isAdmin(req.user)) throw httpError(403, "You can only delete your own comments.");
-  await pool.query("DELETE FROM comments WHERE id = ?", [req.params.id]);
+  await pool.query("DELETE FROM comments WHERE id = ?", [id]);
   res.json({ message: "Comment deleted." });
 }));
 
@@ -449,9 +460,10 @@ app.post("/api/admin/movies", auth, adminOnly, wrap(async (req, res) => {
   res.status(201).json({ movie, message: "Movie saved." });
 }));
 
-app.delete("/api/admin/movies/:id(\d+)", auth, adminOnly, wrap(async (req, res) => {
-  await pool.query("DELETE FROM comments WHERE movie_id = ?", [req.params.id]);
-  await pool.query("DELETE FROM movies WHERE id = ?", [req.params.id]);
+app.delete("/api/admin/movies/:id", auth, adminOnly, wrap(async (req, res) => {
+  const id = requireNumericId(req);
+  await pool.query("DELETE FROM comments WHERE movie_id = ?", [id]);
+  await pool.query("DELETE FROM movies WHERE id = ?", [id]);
   res.json({ message: "Movie deleted." });
 }));
 
@@ -565,6 +577,15 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
   }
   res.status(201).json({ message: "Notice submitted successfully. Thank you." });
 }));
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 600 ? error.status : 500;
+  if (status >= 500) console.error("Request failed:", req.method, req.originalUrl, error);
+  res.status(status).json({
+    error: status >= 500 ? "The server could not complete the request. Please try again." : (error.message || "Request failed.")
+  });
+});
 
 async function start() {
   pool = createPool();
