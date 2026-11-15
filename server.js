@@ -492,11 +492,9 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
     .filter(m => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string")
     .slice(-8).map(m => ({ role: m.role, content: m.content.slice(0, 1500) }));
 
-
   const [movies] = await pool.query(
     "SELECT title_en, title_ka, release_year, imdb_rating, genre FROM movies ORDER BY imdb_rating DESC LIMIT 60");
   const catalog = movies.map(m => `${m.title_en} | ${m.title_ka || "-"} | ${m.release_year || "?"} | ${m.imdb_rating ?? "N/A"} | ${m.genre || "-"}`).join("\n");
-  
 
   let result = { type: "off_topic", reply: OFF_TOPIC_REPLY };
   try {
@@ -528,7 +526,6 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
   res.json({ reply: result.reply });
 }));
 
-
 /* ---------- copyright notices ---------- */
 app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) => {
   const b = req.body || {};
@@ -545,7 +542,7 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
   const supportingUrl = text(b.supportingUrl, 2000) || null;
   if (!["copyright", "trademark", "privacy", "other"].includes(noticeType)) throw httpError(400, "Choose a valid notice type.");
   if (!reporterName || !reporterIdentifier || !reporterAddress || !reporterPhone || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(reporterEmail)) throw httpError(400, "Complete all reporter identity and contact fields.");
-  if (workDescription.length < 20 || claimBasis.length < 20 || reportedUrls.length < 8) throw httpError(400, "Provide a detailed description, legal basis and the exact URLs to review.");
+  if (workDescription.length < 20 || claimBasis.length < 20 || reportedUrls.length < 8) throw httpError(400, "Provide a detailed description, legal basis and the exact URLs to review.  ");
   if (supportingUrl && !/^https:\/\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
   const [saved] = await pool.query(
     `INSERT INTO copyright_reports
