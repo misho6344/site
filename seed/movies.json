@@ -17,9 +17,34 @@
     "videoLicenseUrl": "https://creativecommons.org/licenses/by/3.0/",
     "videoAttribution": "© copyright Blender Foundation | durian.blender.org. Licensed under Creative Commons Attribution 3.0. Retain the complete film credits."
   },
-  { "imdbId": "tt0013442", "titleKa": "ნოსფერატუ" },
-  { "imdbId": "tt0017136", "titleKa": "მეტროპოლისი" },
-  { "imdbId": "tt0000417", "titleKa": "მოგზაურობა მთვარეზე" },
-  { "imdbId": "tt0056923", "titleKa": "შარადა" },
-  { "imdbId": "tt0017925", "titleKa": "გენერალი" }
+  {
+    "imdbId": "tt0013442",
+    "titleKa": "ნოსფერატუ"
+  },
+  {
+    "imdbId": "tt0017136",
+    "titleKa": "მეტროპოლისი"
+  },
+  {
+    "imdbId": "tt0000417",
+    "titleKa": "მოგზაურობა მთვარეზე"
+  },
+  {
+    "imdbId": "tt0056923",
+    "titleKa": "შარადა"
+  },
+  {
+    "imdbId": "tt0017925",
+    "titleKa": "გენერალი"
+  },
+  {
+    "imdbId": "tt33175825",
+    "titleKa": "ტიტანებზე შეტევა: უკანასკნელი თავდასხმა",
+    "videoUrl": "https://www.youtube.com/watch?v=PuE1uRbpkTk",
+    "videoType": "trailer",
+    "videoRightsBasis": "official_embed",
+    "videoRightsEvidence": "The official Attack on Titan portal identifies this exact YouTube video as the official trailer: https://aot-portal.com/en/movie_gallery/gekijouban-shingeki-no-kyojin-kanketsu-hen-the-last-attack-hon-yokoku/ . It is published by Pony Canyon's verified YouTube channel: https://www.youtube.com/watch?v=PuE1uRbpkTk",
+    "videoLicenseUrl": "https://www.youtube.com/t/terms",
+    "videoAttribution": "Official trailer published by Pony Canyon for Attack on Titan: The Last Attack. Embedded from the verified Pony Canyon YouTube channel; this is a trailer, not the full movie."
+  }
 ]

@@ -412,6 +412,7 @@ app.post("/api/admin/movies", auth, adminOnly, wrap(async (req, res) => {
     posterUrl: text(b.posterUrl, 2000) || null,
     backdropUrl: text(b.backdropUrl, 2000) || null,
     videoUrl: text(b.videoUrl, 2000) || null,
+    videoType: text(b.videoType, 20) || "movie",
     posterRightsBasis: text(b.posterRightsBasis, 40) || null,
     posterRightsEvidence: text(b.posterRightsEvidence, 2000) || null,
     posterLicenseUrl: text(b.posterLicenseUrl, 2000) || null,
@@ -524,9 +525,9 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
   const reportedUrls = text(b.reportedUrls, 4000);
   const supportingUrl = text(b.supportingUrl, 2000) || null;
   if (!["copyright", "trademark", "privacy", "other"].includes(noticeType)) throw httpError(400, "Choose a valid notice type.");
-  if (!reporterName || !reporterIdentifier || !reporterAddress || !reporterPhone || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(reporterEmail)) throw httpError(400, "Complete all reporter identity and contact fields.");
+  if (!reporterName || !reporterIdentifier || !reporterAddress || !reporterPhone || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(reporterEmail)) throw httpError(400, "Complete all reporter identity and contact fields.");
   if (workDescription.length < 20 || claimBasis.length < 20 || reportedUrls.length < 8) throw httpError(400, "Provide a detailed description, legal basis and the exact URLs to review.");
-  if (supportingUrl && !/^https:\/\/\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
+  if (supportingUrl && !/^https:\/\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
   const [saved] = await pool.query(
     `INSERT INTO copyright_reports
       (notice_type, reporter_name, reporter_identifier, reporter_address, reporter_phone, reporter_email, work_description, claim_basis, reported_urls, supporting_url)
@@ -599,6 +600,36 @@ app.use((err, _req, res, _next) => {
     }
     pool = createPool();
     await initSchema(pool);
+
+    try {
+      const lastAttackTrailer = require("./seed/movies.json").find(movie => movie.imdbId === "tt33175825");
+      if (lastAttackTrailer?.videoUrl) {
+        const [existing] = await pool.query(
+          "SELECT id, video_rights_basis FROM movies WHERE imdb_id = ?",
+          [lastAttackTrailer.imdbId]
+        );
+        if (!existing.length) {
+          await upsertMovie(pool, lastAttackTrailer);
+          console.log("Added Attack on Titan: The Last Attack with its official trailer.");
+        } else if (!existing[0].video_rights_basis) {
+          const [updated] = await pool.query(
+            `UPDATE movies
+             SET video_url = ?, video_type = ?, video_rights_basis = ?, video_rights_evidence = ?,
+                 video_license_url = ?, video_attribution = ?
+             WHERE imdb_id = ? AND video_rights_basis IS NULL`,
+            [
+              lastAttackTrailer.videoUrl, lastAttackTrailer.videoType || "trailer",
+              lastAttackTrailer.videoRightsBasis, lastAttackTrailer.videoRightsEvidence,
+              lastAttackTrailer.videoLicenseUrl, lastAttackTrailer.videoAttribution,
+              lastAttackTrailer.imdbId
+            ]
+          );
+          if (updated.affectedRows) console.log("Replaced the unverified Attack on Titan player URL with the official trailer.");
+        }
+      }
+    } catch (error) {
+      console.error("Attack on Titan trailer setup skipped:", error.message);
+    }
 
     if (production && !sharedRateLimitEnabled) {
       console.warn("DDoS hardening: rate limits are process-local. Configure both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to share counters across instances.");

@@ -133,7 +133,7 @@ function heroSlideHTML(m, active = true) {
       ${m.title_ka ? `<div class="en">${esc(m.title_en)}</div>` : ""}
       <div class="hero-meta">${imdbBadge(m)}<span class="pill">${esc(m.release_year || "—")}</span>${String(m.genre || "").split(",").slice(0, 3).map(g => `<span class="pill">${esc(g.trim())}</span>`).filter(() => m.genre).join("")}</div>
       <p>${esc(m.description || "")}</p>
-      <div class="hero-actions"><a class="btn solid" href="#/movie/${m.id}/play">▶ Watch Movie</a><a class="btn ghost" href="#/movie/${m.id}">Details</a></div>
+      <div class="hero-actions"><a class="btn solid" href="#/movie/${m.id}/play">${m.video_type === "trailer" && safeUrl(m.video_url) ? "▶ Watch Trailer" : "▶ Watch Movie"}</a><a class="btn ghost" href="#/movie/${m.id}">Details</a></div>
     </div></section>`;
 }
 
@@ -315,7 +315,7 @@ function mountPlayer() {
   if (!embed) { box.innerHTML = `<div class="player-note"><p>${url ? "This video source is not supported by the player." : "Video is not available for this title yet."}</p></div>`; return; }
   box.innerHTML = embed.type === "video"
     ? `<video controls autoplay src="${esc(embed.src)}"></video>`
-    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"></iframe>`;
+    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"></iframe>`;
   const video = box.querySelector("video");
   if (video) {
     const resumeAt = playbackPositions.get(String(currentMovie.id));
@@ -361,7 +361,7 @@ async function showMovie(id, autoplay) {
           </div>
           <p class="desc">${esc(m.description || "No description available.")}</p>
           ${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length ? `<div class="rights-credit"><strong>Content credits</strong><p>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).map(esc).join("<br>")}</p>${m.video_license_url ? `<a href="${esc(safeUrl(m.video_license_url))}" target="_blank" rel="noopener noreferrer">Video licence</a>` : ""}</div>` : ""}
-          <button class="btn solid" id="watchBtn" type="button">▶ Watch Movie</button>
+          <button class="btn solid" id="watchBtn" type="button">${m.video_type === "trailer" && safeUrl(m.video_url) ? "▶ Watch Trailer" : "▶ Watch Movie"}</button>
         </div>
       </div>
       <div class="player" id="player">

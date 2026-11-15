@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS movies (
   poster_url TEXT NULL,
   backdrop_url TEXT NULL,
   video_url TEXT NULL,
+  video_type VARCHAR(20) NOT NULL DEFAULT 'movie',
   description TEXT NULL,
   poster_rights_basis VARCHAR(40) NULL,
   poster_rights_evidence TEXT NULL,
