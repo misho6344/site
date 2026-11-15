@@ -558,6 +558,21 @@ app.patch("/api/admin/copyright-reports/:id(\\d+)", auth, adminOnly, wrap(async 
   if (!["received", "reviewing", "removed", "rejected", "restored"].includes(status)) throw httpError(400, "Invalid report status.");
   const [result] = await pool.query("UPDATE copyright_reports SET status = ?, admin_note = ?, handled_at = CASE WHEN ? IN ('removed','rejected','restored') THEN UTC_TIMESTAMP() ELSE NULL END WHERE id = ?", [status, note, status, req.params.id]);
   if (!result.affectedRows) throw httpError(404, "Copyright report not found.");
+  const [rows] = await pool.query("SELECT reporter_email, reporter_name, status, admin_note, id FROM copyright_reports WHERE id = ?", [req.params.id]);
+  const report = rows[0];
+  if (report && process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
+    void fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: process.env.MAIL_FROM,
+        to: [report.reporter_email],
+        subject: `NoAdFrame rights notice #${report.id}: ${report.status}`,
+        text: [`Hello ${report.reporter_name},`, `Your notice status is now: ${report.status}.`, report.admin_note || "", "NoAdFrame"].filter(Boolean).join("\\n\\n")
+      })
+    }).then(r => { if (!r.ok) console.error("Copyright notice response email failed:", r.status); })
+      .catch(e => console.error("Copyright notice response email failed:", e.message));
+  }
   res.json({ message: "Copyright report updated." });
 }));
 
