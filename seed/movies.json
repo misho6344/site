@@ -54,5 +54,25 @@
     "posterRightsEvidence": "Unmodified YouTube thumbnail preview for Pony Canyon's official trailer. It is used only as the preview image linked to the corresponding embedded official trailer: https://www.youtube.com/watch?v=PuE1uRbpkTk ; official trailer listing: https://aot-portal.com/en/movie_gallery/gekijouban-shingeki-no-kyojin-kanketsu-hen-the-last-attack-hon-yokoku/",
     "posterLicenseUrl": "https://support.google.com/youtube/answer/171780?hl=en",
     "posterAttribution": "Official Pony Canyon trailer preview thumbnail from YouTube, displayed unmodified and linked to the official embedded trailer."
+  },
+  {
+    "imdbId": "tt12299608",
+    "titleKa": "მიკი 17",
+    "videoUrl": "https://www.youtube.com/watch?v=osYpGSz_0i4",
+    "videoType": "trailer",
+    "videoRightsBasis": "official_embed",
+    "videoRightsEvidence": "Official trailer published by the verified Warner Bros. YouTube channel: https://www.youtube.com/watch?v=osYpGSz_0i4 . Warner Bros. official pressroom also lists this as a trailer: https://press.wbd.com/us/na/media-release/hbo-max/mickey-17-begins-streaming-exclusively-max-may-23",
+    "videoLicenseUrl": "https://www.youtube.com/t/terms",
+    "videoAttribution": "Official Mickey 17 trailer published by Warner Bros.; embedded from the verified studio channel."
+  },
+  {
+    "imdbId": "tt14849194",
+    "titleKa": "ჩარჩენილები",
+    "videoUrl": "https://www.youtube.com/watch?v=AhKLpJmHhIg",
+    "videoType": "trailer",
+    "videoRightsBasis": "official_embed",
+    "videoRightsEvidence": "Official trailer published by the verified Focus Features YouTube channel: https://www.youtube.com/watch?v=AhKLpJmHhIg . Focus Features film page identifies it as the official trailer: https://www.focusfeatures.com/the-holdovers",
+    "videoLicenseUrl": "https://www.youtube.com/t/terms",
+    "videoAttribution": "Official The Holdovers trailer published by Focus Features; embedded from the verified studio channel."
   }
 ]
