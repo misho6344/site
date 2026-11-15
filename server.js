@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
@@ -134,6 +135,26 @@ const text = (value, max) => String(value ?? "").trim().slice(0, max);
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{3,30}$/u;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const likeEscape = (s) => s.replace(/[\\%_]/g, "\\$&");
+
+function applyVideoOverrides(rows) {
+  let overrides;
+  try {
+    overrides = JSON.parse(fs.readFileSync(path.join(__dirname, "video-overrides.json"), "utf8"));
+  } catch {
+    return rows;
+  }
+  return rows.map((row) => {
+    const override = overrides[String(row.imdb_id || "")];
+    if (!override || override.enabled !== true || override.rightsConfirmed !== true) return row;
+    if (!row.video_rights_basis || !row.video_rights_evidence) return row;
+    if (typeof override.url !== "string" || !/^https:\/\//i.test(override.url)) return row;
+    if (typeof override.rightsEvidence !== "string" || override.rightsEvidence.trim().length < 8) return row;
+    const next = { ...row, video_url: override.url.trim() };
+    if (override.type === "movie" || override.type === "trailer") next.video_type = override.type;
+    next.has_video_source = 1;
+    return next;
+  });
+}
 
 function signToken(user) {
   const payload = { id: user.id, username: user.username, email: user.email };
@@ -343,7 +364,7 @@ app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
      FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
     [...params, limit, safeOffset]
   );
-  res.json({ ...paginationMeta(safePage, limit, total), movies: rows });
+  res.json({ ...paginationMeta(safePage, limit, total), movies: applyVideoOverrides(rows) });
 }));
 
 app.get("/api/movies/categories", wrap(async (_req, res) => {
@@ -362,7 +383,7 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
     run("m.release_year DESC, m.created_at DESC"),
     pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
-  res.json({ featured: featuredRows, popular, topRated, newReleases });
+  res.json({ featured: applyVideoOverrides(featuredRows), popular: applyVideoOverrides(popular), topRated: applyVideoOverrides(topRated), newReleases: applyVideoOverrides(newReleases) });
 }));
 
 app.get("/api/genres", wrap(async (_req, res) => {
@@ -383,7 +404,7 @@ app.get("/api/movies/:id(\\d+)", wrap(async (req, res) => {
   const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [req.params.id]);
   if (!rows.length) throw httpError(404, "Movie not found.");
   pool.query("UPDATE movies SET views = views + 1 WHERE id = ?", [req.params.id]).catch(() => {});
-  res.json({ movie: rows[0] });
+  res.json({ movie: applyVideoOverrides(rows)[0] });
 }));
 
 /* ---------- comments ---------- */
