@@ -545,6 +545,21 @@ $("logoutBtn").addEventListener("click", async () => {
   finally { setSession(null); toast("You have logged out."); if (location.hash.startsWith("#/profile")) location.hash = "#/"; }
 });
 
+/* Keep the assistant composer above the mobile keyboard. */
+function syncChatKeyboardInset() {
+  const viewport = window.visualViewport;
+  const inset = viewport
+    ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+    : 0;
+  document.documentElement.style.setProperty("--chat-keyboard-inset", String(Math.round(inset)) + "px");
+}
+syncChatKeyboardInset();
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncChatKeyboardInset);
+  window.visualViewport.addEventListener("scroll", syncChatKeyboardInset);
+}
+window.addEventListener("resize", syncChatKeyboardInset);
+
 /* ---------- AI assistant ---------- */
 function addBubble(role, content) {
   const el = document.createElement("div");
