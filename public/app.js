@@ -328,22 +328,29 @@ function embedFor(url) {
 }
 
 const archiveVideoRequests = new Map();
+const archiveVideoUrls = new Map();
 
 function isMobilePlayer() {
   return window.matchMedia("(max-width: 700px), (pointer: coarse)").matches;
 }
 
 function resolveArchiveVideo(identifier) {
+  if (archiveVideoUrls.has(identifier)) return Promise.resolve(archiveVideoUrls.get(identifier));
   if (!archiveVideoRequests.has(identifier)) {
     const request = api(`/api/archive-video?identifier=${encodeURIComponent(identifier)}`)
-      .then(data => safeUrl(data.videoUrl))
-      .catch(() => null);
+      .then(data => {
+        const url = safeUrl(data.videoUrl);
+        if (url) archiveVideoUrls.set(identifier, url);
+        return url;
+      })
+      .catch(() => null)
+      .finally(() => archiveVideoRequests.delete(identifier));
     archiveVideoRequests.set(identifier, request);
   }
   return archiveVideoRequests.get(identifier);
 }
 
-function warmArchiveVideoSources(movies, maxCount = 2) {
+function warmArchiveVideoSources(movies, maxCount = 3) {
   const seen = new Set();
   for (const movie of movies || []) {
     const url = safeUrl(movie?.video_url);
@@ -360,14 +367,18 @@ function exitMobilePlayerFullscreen(box = $("player")) {
   if (box) {
     box.classList.remove("player-mobile-fullscreen");
     box.querySelector(".player-fullscreen-close")?.remove();
+    if (document.fullscreenElement === box && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
   }
   document.body.classList.remove("player-open");
 }
 
 function addMobilePlayerFullscreen(box) {
-  if (!isMobilePlayer()) return false;
+  if (!isMobilePlayer()) return;
   box.classList.add("player-mobile-fullscreen");
   document.body.classList.add("player-open");
+  if (box.querySelector(".player-fullscreen-close")) return;
   const close = document.createElement("button");
   close.type = "button";
   close.className = "player-fullscreen-close";
@@ -375,10 +386,31 @@ function addMobilePlayerFullscreen(box) {
   close.textContent = "×";
   close.addEventListener("click", () => exitMobilePlayerFullscreen(box));
   box.append(close);
-  return true;
 }
 
-async function mountPlayer() {
+function requestMobilePlayerFullscreen(box, media) {
+  if (!isMobilePlayer()) return;
+  addMobilePlayerFullscreen(box);
+
+  // iOS Safari only offers native fullscreen for HTML video elements.
+  // This is invoked synchronously from the user's tap, never after an await.
+  if (media && typeof media.webkitEnterFullscreen === "function") {
+    try {
+      media.webkitEnterFullscreen();
+      return;
+    } catch { /* continue to the standard Fullscreen API */ }
+  }
+
+  const request = box.requestFullscreen || box.webkitRequestFullscreen;
+  if (typeof request === "function") {
+    try {
+      const result = request.call(box);
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    } catch { /* the fixed mobile player remains as a visual fallback */ }
+  }
+}
+
+function mountPlayer({ userInitiated = false } = {}) {
   const box = $("player");
   const movie = currentMovie;
   const url = movie && safeUrl(movie.video_url);
@@ -388,28 +420,23 @@ async function mountPlayer() {
     return;
   }
 
-  const mobileFullscreen = isMobilePlayer();
-  if (mobileFullscreen) {
-    box.classList.add("player-mobile-fullscreen");
-    document.body.classList.add("player-open");
-  }
-  box.innerHTML = `<div class="player-loading"><span></span><p>Preparing video…</p></div>`;
-
+  // Resolve synchronously whenever the background prefetch has finished.
+  // Otherwise show the Archive.org player immediately instead of waiting on the API.
   let source = embed;
   if (embed.type === "archive") {
-    const directUrl = await resolveArchiveVideo(embed.identifier);
-    if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
+    const directUrl = archiveVideoUrls.get(embed.identifier);
     source = directUrl
       ? { type: "video", src: directUrl }
-      : { type: "iframe", src: embed.fallbackSrc };
+      : { type: "iframe", src: embed.fallbackSrc + "?autoplay=1" };
+    if (!directUrl) void resolveArchiveVideo(embed.identifier);
   }
-  if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
 
   box.innerHTML = source.type === "video"
     ? `<video controls autoplay playsinline webkit-playsinline preload="auto" src="${esc(source.src)}"></video>`
     : `<iframe loading="eager" src="${esc(source.src)}" title="${esc(movie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
 
   const video = box.querySelector("video");
+  const iframe = box.querySelector("iframe");
   if (video) {
     const resumeAt = playbackPositions.get(String(movie.id));
     if (Number.isFinite(resumeAt) && resumeAt > 0) {
@@ -420,14 +447,23 @@ async function mountPlayer() {
     video.addEventListener("timeupdate", () => {
       if (Number.isFinite(video.currentTime)) playbackPositions.set(String(movie.id), video.currentTime);
     });
-    try {
-      const playback = video.play();
-      if (playback && typeof playback.catch === "function") playback.catch(() => {});
-    } catch { /* playback can still be started from the native controls */ }
   }
 
-  if (mobileFullscreen) addMobilePlayerFullscreen(box);
-  else box.scrollIntoView({ behavior: "smooth", block: "center" });
+  // These calls must happen within the original tap handler to preserve
+  // mobile autoplay/fullscreen user activation.
+  if (userInitiated && video) {
+    try {
+      const playback = video.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(() => toast("Tap the video play control to start playback."));
+      }
+    } catch { /* the native video controls remain available */ }
+  }
+  if (userInitiated && isMobilePlayer()) {
+    requestMobilePlayerFullscreen(box, video || iframe);
+  } else if (!isMobilePlayer()) {
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 async function showMovie(id, autoplay) {
@@ -475,7 +511,7 @@ async function showMovie(id, autoplay) {
         <div id="commentsList"></div>
       </section>`;
     $("commentSort").value = commentSort;
-    const play = () => mountPlayer();
+    const play = () => mountPlayer({ userInitiated: true });
     $("posterPlay").addEventListener("click", play);
     $("posterPlay").addEventListener("keydown", e => { if (e.key === "Enter") play(); });
     const watchButton = $("watchBtn");
@@ -483,7 +519,7 @@ async function showMovie(id, autoplay) {
     $("playerCover").addEventListener("click", play);
     $("commentSort").addEventListener("change", e => { commentSort = e.target.value; loadComments(); });
     $("commentForm").addEventListener("submit", postComment);
-    if (autoplay) void mountPlayer();
+    if (autoplay && !isMobilePlayer()) mountPlayer({ userInitiated: false });
     await loadComments();
   } catch (error) {
     view.innerHTML = `<div class="state">${esc(error.message)}</div>`;
