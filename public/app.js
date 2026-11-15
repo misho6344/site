@@ -386,6 +386,7 @@ function exitMobilePlayerFullscreen(box = $("player")) {
   if (box) {
     box.classList.remove("player-mobile-fullscreen");
     box.querySelector(".player-fullscreen-close")?.remove();
+    box.querySelector(".player-start-overlay")?.remove();
     if (document.fullscreenElement === box && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
@@ -411,22 +412,86 @@ function requestMobilePlayerFullscreen(box, media) {
   if (!isMobilePlayer()) return;
   addMobilePlayerFullscreen(box);
 
-  // iOS Safari only offers native fullscreen for HTML video elements.
-  // This is invoked synchronously from the user's tap, never after an await.
+  // iPhone Safari uses native fullscreen for HTML video.
   if (media && typeof media.webkitEnterFullscreen === "function") {
     try {
       media.webkitEnterFullscreen();
       return;
-    } catch { /* continue to the standard Fullscreen API */ }
+    } catch { /* use the standard Fullscreen API if available */ }
   }
 
-  const request = box.requestFullscreen || box.webkitRequestFullscreen;
+  const target = media && typeof media.requestFullscreen === "function" ? media : box;
+  const request = target.requestFullscreen || target.webkitRequestFullscreen;
   if (typeof request === "function") {
     try {
-      const result = request.call(box);
+      const result = request.call(target);
       if (result && typeof result.catch === "function") result.catch(() => {});
-    } catch { /* the fixed mobile player remains as a visual fallback */ }
+    } catch { /* fixed full-screen player remains as a fallback */ }
   }
+}
+
+function showPlayerStartControl(box, video) {
+  box.querySelector(".player-start-overlay")?.remove();
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "player-start-overlay";
+  button.setAttribute("aria-label", "Start video");
+  button.innerHTML = '<span class="player-start-icon">▶</span><b>Tap to play</b><small>Your video is ready</small>';
+  button.addEventListener("click", () => {
+    button.remove();
+    startVideoPlayback(box, video);
+  }, { once: true });
+  box.append(button);
+}
+
+function startVideoPlayback(box, video) {
+  if (!video) return;
+  if (isMobilePlayer()) requestMobilePlayerFullscreen(box, video);
+  try {
+    const playback = video.play();
+    if (playback && typeof playback.catch === "function") {
+      playback.catch(() => {
+        showPlayerStartControl(box, video);
+        toast("Tap the play control to start the video.");
+      });
+    }
+  } catch {
+    showPlayerStartControl(box, video);
+  }
+}
+
+function renderPlayerSource(box, movie, source, { userInitiated = false, delayed = false } = {}) {
+  box.innerHTML = source.type === "video"
+    ? `<video class="player-media" controls playsinline webkit-playsinline preload="metadata" src="${esc(source.src)}"></video>`
+    : `<iframe class="player-media" loading="eager" src="${esc(source.src)}" title="${esc(movie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+
+  if (isMobilePlayer()) {
+    addMobilePlayerFullscreen(box);
+  }
+
+  const video = box.querySelector("video");
+  if (video) {
+    const resumeAt = playbackPositions.get(String(movie.id));
+    if (Number.isFinite(resumeAt) && resumeAt > 0) {
+      video.addEventListener("loadedmetadata", () => {
+        try { video.currentTime = resumeAt; } catch { /* seek may be unavailable */ }
+      }, { once: true });
+    }
+    video.addEventListener("timeupdate", () => {
+      if (Number.isFinite(video.currentTime)) playbackPositions.set(String(movie.id), video.currentTime);
+    });
+    if (userInitiated && !delayed) {
+      startVideoPlayback(box, video);
+    } else if (delayed && isMobilePlayer()) {
+      // The network lookup has completed after the original tap; give the user
+      // a fresh, explicit play action so mobile Safari/Chrome allows playback.
+      showPlayerStartControl(box, video);
+    }
+  } else if (userInitiated && isMobilePlayer()) {
+    requestMobilePlayerFullscreen(box, box.querySelector("iframe"));
+  }
+
+  if (!isMobilePlayer()) box.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function mountPlayer({ userInitiated = false } = {}) {
@@ -439,51 +504,39 @@ function mountPlayer({ userInitiated = false } = {}) {
     return;
   }
 
-  // Resolve synchronously whenever the background prefetch has finished.
-  // Otherwise show the Archive.org player immediately instead of waiting on the API.
-  let source = embed;
-  if (embed.type === "archive") {
-    const directUrl = archiveVideoUrls.get(embed.identifier);
-    source = directUrl
-      ? { type: "video", src: directUrl }
-      : { type: "iframe", src: embed.fallbackSrc + "?autoplay=1" };
-    if (!directUrl) void resolveArchiveVideo(embed.identifier);
-  }
-
   document.body.classList.add("player-open");
-  box.innerHTML = source.type === "video"
-    ? `<video controls autoplay playsinline webkit-playsinline preload="auto" src="${esc(source.src)}"></video>`
-    : `<iframe loading="eager" src="${esc(source.src)}" title="${esc(movie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  if (isMobilePlayer()) addMobilePlayerFullscreen(box);
 
-  const video = box.querySelector("video");
-  const iframe = box.querySelector("iframe");
-  if (video) {
-    const resumeAt = playbackPositions.get(String(movie.id));
-    if (Number.isFinite(resumeAt) && resumeAt > 0) {
-      video.addEventListener("loadedmetadata", () => {
-        try { video.currentTime = resumeAt; } catch { /* seek may be unavailable */ }
-      }, { once: true });
+  if (embed.type === "archive") {
+    const cachedUrl = archiveVideoUrls.get(embed.identifier);
+    if (cachedUrl) {
+      renderPlayerSource(box, movie, { type: "video", src: cachedUrl }, { userInitiated });
+      return;
     }
-    video.addEventListener("timeupdate", () => {
-      if (Number.isFinite(video.currentTime)) playbackPositions.set(String(movie.id), video.currentTime);
+
+    // Keep the full-screen player visible while resolving the browser-playable file.
+    box.innerHTML = '<div class="player-loading"><span></span><p>Preparing video…</p></div>';
+    if (isMobilePlayer()) addMobilePlayerFullscreen(box);
+    if (userInitiated && isMobilePlayer()) requestMobilePlayerFullscreen(box, null);
+
+    resolveArchiveVideo(embed.identifier).then(videoUrl => {
+      if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
+      if (videoUrl) {
+        renderPlayerSource(box, movie, { type: "video", src: videoUrl }, {
+          userInitiated,
+          delayed: true
+        });
+      } else {
+        renderPlayerSource(box, movie, { type: "iframe", src: embed.fallbackSrc }, {
+          userInitiated,
+          delayed: true
+        });
+      }
     });
+    return;
   }
 
-  // These calls must happen within the original tap handler to preserve
-  // mobile autoplay/fullscreen user activation.
-  if (userInitiated && video) {
-    try {
-      const playback = video.play();
-      if (playback && typeof playback.catch === "function") {
-        playback.catch(() => toast("Tap the video play control to start playback."));
-      }
-    } catch { /* the native video controls remain available */ }
-  }
-  if (userInitiated && isMobilePlayer()) {
-    requestMobilePlayerFullscreen(box, video || iframe);
-  } else if (!isMobilePlayer()) {
-    box.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
+  renderPlayerSource(box, movie, embed, { userInitiated });
 }
 
 async function showMovie(id, autoplay) {
