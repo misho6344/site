@@ -264,3 +264,20 @@ The copyright policy page is informational and is not legal advice. The operator
 - HTML
 - CSS
 - SQL
+
+## გამოყენებული ტექნოლოგიები და ბიბლიოთეკები
+
+- Node.js
+- Express.js
+- npm
+- MySQL
+- TiDB
+- Redis
+- REST API
+- JWT
+- bcryptjs
+- mysql2
+- dotenv
+- CORS
+- express-rate-limit
+- OpenAI Node.js SDK
