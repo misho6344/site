@@ -294,3 +294,24 @@ footer{display:flex;gap:20px;align-items:center;justify-content:space-between;fl
   .searchbox,.searchbox:focus-within{flex-basis:24px;width:24px}
   .auth-actions .btn{padding:4px 5px;font-size:9px}
 }
+
+
+/* Lift the mobile AI composer clear of browser chrome and the on-screen keyboard. */
+@media(max-width:700px){
+  .chat-panel{
+    bottom:calc(max(76px,var(--chat-keyboard-inset,0px)) + env(safe-area-inset-bottom));
+  }
+  .chat-form{
+    position:relative;
+    z-index:2;
+    margin-top:4px;
+    padding:12px 12px 14px;
+    background:var(--panel);
+    border-top:1px solid var(--line);
+  }
+  .chat-form input{
+    min-height:48px;
+    padding:11px 15px;
+  }
+  .chat-form button{width:46px;height:46px;flex:0 0 46px}
+}
