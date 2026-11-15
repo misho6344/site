@@ -256,6 +256,7 @@ The copyright policy page is informational and is not legal advice. The operator
 - [OMDb API](https://www.omdbapi.com/)
 - [OpenAI Platform](https://platform.openai.com/)
 - [Internet Archive](https://archive.org/)
+- [UptimeRobot]([https://dashboard.uptimerobot.com/)--> for site to not sleep
 - [Google Fonts](https://fonts.google.com/)
 
 ## პროგრამირების ენები
