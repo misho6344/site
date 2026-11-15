@@ -211,7 +211,23 @@ $("fReset").addEventListener("click", () => {
   state.page = 1;
   showMovies();
 });
-$("searchForm").addEventListener("submit", e => { e.preventDefault(); applyFilters({ q: $("searchInput").value.trim() }); });
+$("searchForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const query = $("searchInput").value.trim();
+  $("searchForm").classList.remove("is-open");
+  applyFilters({ q: query });
+});
+$("searchForm").addEventListener("click", e => {
+  if (!window.matchMedia("(max-width: 700px)").matches || $("searchForm").classList.contains("is-open")) return;
+  e.preventDefault();
+  $("searchForm").classList.add("is-open");
+  $("searchInput").focus({ preventScroll: true });
+});
+document.addEventListener("click", e => {
+  if (window.matchMedia("(max-width: 700px)").matches && !$("searchForm").contains(e.target)) {
+    $("searchForm").classList.remove("is-open");
+  }
+});
 $("searchInput").addEventListener("input", () => {
   clearTimeout(catalogTimer);
   catalogTimer = setTimeout(() => applyFilters({ q: $("searchInput").value.trim() }), 400);
@@ -490,7 +506,7 @@ $("loginBtn").addEventListener("click", () => openAuth("login"));
 $("registerBtn").addEventListener("click", () => openAuth("register"));
 document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 $("authModal").addEventListener("click", e => { if (e.target === $("authModal") || e.target.hasAttribute("data-close")) closeAuth(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeAuth(); $("chatPanel").classList.remove("open"); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeAuth(); $("chatPanel").classList.remove("open"); $("searchForm").classList.remove("is-open"); } });
 document.addEventListener("click", e => { const b = e.target.closest("[data-open-auth]"); if (b) openAuth(b.dataset.openAuth); });
 
 async function submitAuth(event, endpoint, welcome) {
