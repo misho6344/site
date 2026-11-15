@@ -718,3 +718,92 @@ body.player-open .chat-panel{
   .player.player-mobile-fullscreen video,
   .player.player-mobile-fullscreen iframe{object-fit:contain}
 }
+
+
+/* Mobile header: six equal, full-width touch targets. */
+@media(max-width:700px){
+  .topbar{
+    display:grid!important;
+    grid-template-columns:minmax(0,1.45fr) repeat(3,minmax(0,1fr)) minmax(0,.65fr) minmax(0,1fr);
+    grid-template-areas:"brand movies genres about search login";
+    align-items:center;
+    justify-items:stretch;
+    gap:2px;
+    width:100%;
+    padding:8px 10px;
+  }
+  .brand{grid-area:brand;justify-content:center;gap:3px;min-width:0}
+  .brand-logo{width:23px;height:23px;flex:0 0 23px}
+  .brand-text{display:block;font-size:clamp(9px,2.7vw,12px);text-align:center}
+  .main-nav{display:contents!important}
+  .main-nav a{
+    display:flex!important;
+    min-width:0;
+    width:100%;
+    min-height:36px;
+    align-items:center;
+    justify-content:center;
+    padding:5px 1px;
+    font-size:clamp(9px,2.65vw,11px);
+    line-height:1.05;
+    white-space:nowrap;
+    text-align:center;
+  }
+  .main-nav a[data-nav="home"]{display:none!important}
+  .main-nav a[data-nav="movies"]{grid-area:movies}
+  .main-nav a[data-nav="genres"]{grid-area:genres}
+  .main-nav a[data-nav="about"]{grid-area:about}
+  .header-actions{display:contents!important}
+  .searchbox,.searchbox:focus-within{
+    grid-area:search;
+    display:flex!important;
+    justify-self:center;
+    align-self:center;
+    width:30px;
+    height:32px;
+    min-width:30px;
+    padding:0;
+    justify-content:center;
+    border:0;
+    background:transparent;
+  }
+  .searchbox input{display:none!important}
+  .searchbox.is-open{
+    position:absolute;
+    z-index:45;
+    top:calc(100% + 5px);
+    left:10px;
+    right:10px;
+    width:auto;
+    height:44px;
+    justify-self:stretch;
+    justify-content:flex-start;
+    padding:0 13px;
+    border:1px solid rgba(255,140,0,.55);
+    border-radius:13px;
+    background:var(--panel);
+  }
+  .searchbox.is-open input{display:block!important;flex:1 1 auto;min-width:0;font-size:16px}
+  .auth-actions{display:contents!important}
+  #loginBtn,#profileLink{
+    grid-area:login;
+    display:flex!important;
+    min-width:0;
+    width:100%;
+    min-height:32px;
+    align-items:center;
+    justify-content:center;
+    padding:5px 2px!important;
+    font-size:clamp(9px,2.6vw,11px)!important;
+    white-space:nowrap;
+  }
+  #registerBtn,#logoutBtn{display:none!important}
+  #guestActions[hidden],#userActions[hidden]{display:none!important}
+}
+@media(max-width:380px){
+  .topbar{padding-inline:7px;gap:1px}
+  .brand-logo{width:21px;height:21px;flex-basis:21px}
+  .brand-text{font-size:9px}
+  .main-nav a{font-size:9px;padding-inline:0}
+  #loginBtn,#profileLink{font-size:9px!important}
+}
