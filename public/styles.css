@@ -807,3 +807,14 @@ body.player-open .chat-panel{
   .main-nav a{font-size:9px;padding-inline:0}
   #loginBtn,#profileLink{font-size:9px!important}
 }
+
+
+/* Clear, actionable error instead of an endless mobile player spinner. */
+.player-error{
+  padding:24px;
+  text-align:center;
+  background:#050505;
+}
+.player-error h3{margin:0 0 12px;color:#fff;font-size:20px}
+.player-error p{max-width:520px;margin:0 auto 18px;color:rgba(255,255,255,.75);line-height:1.6}
+.player-error .btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
