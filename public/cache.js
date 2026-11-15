@@ -10,6 +10,7 @@
   function cacheKey(url) {
     if (cacheable.has(url.pathname)) return PREFIX + url.pathname + url.search;
     if (url.pathname === "/api/movies") return PREFIX + url.pathname + url.search;
+    if (/^\/api\/movies\/\d+$/.test(url.pathname)) return PREFIX + url.pathname;
     return null;
   }
   function read(key) {
