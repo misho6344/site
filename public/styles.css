@@ -153,3 +153,144 @@ footer{display:flex;gap:20px;align-items:center;justify-content:space-between;fl
   .chat-panel{left:12px;right:12px;width:auto;max-width:calc(100% - 24px)}
   .pagination{max-width:100%;min-width:0}
 }
+
+
+/* Single-row mobile header: brand, navigation, search toggle and auth actions. */
+@media(max-width:700px){
+  .topbar{
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:6px;
+    min-height:50px;
+    padding:6px var(--pad);
+  }
+  .brand{flex:0 0 auto;gap:0;min-width:0}
+  .brand-logo{width:29px;height:29px}
+  .brand-text{display:none}
+  .main-nav{
+    order:initial;
+    flex:1 1 auto;
+    width:auto;
+    min-width:0;
+    max-width:none;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:0;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scrollbar-width:none;
+    white-space:nowrap;
+  }
+  .main-nav::-webkit-scrollbar{display:none}
+  .main-nav a{
+    flex:0 0 auto;
+    padding:5px clamp(2px,1vw,6px);
+    font-size:clamp(9px,2.8vw,12px);
+    line-height:1.2;
+  }
+  .header-actions{
+    order:initial;
+    flex:0 0 auto;
+    width:auto;
+    max-width:none;
+    margin-left:0;
+    gap:3px;
+  }
+  .searchbox,
+  .searchbox:focus-within{
+    flex:0 0 27px;
+    width:27px;
+    height:30px;
+    justify-content:center;
+    gap:0;
+    padding:0;
+    border:0;
+    border-radius:50%;
+    background:transparent;
+    color:var(--white);
+  }
+  .searchbox svg{width:18px;height:18px;flex:0 0 18px}
+  .searchbox input{display:none}
+  .searchbox.is-open{
+    position:absolute;
+    z-index:45;
+    top:calc(100% + 6px);
+    left:var(--pad);
+    right:var(--pad);
+    width:auto;
+    max-width:none;
+    height:44px;
+    display:flex;
+    justify-content:flex-start;
+    gap:9px;
+    padding:0 13px;
+    border:1px solid rgba(255,140,0,.55);
+    border-radius:13px;
+    background:var(--panel);
+    box-shadow:0 14px 34px rgba(0,0,0,.65);
+  }
+  .searchbox.is-open input{
+    display:block;
+    flex:1 1 auto;
+    width:100%;
+    min-width:0;
+    font-size:16px;
+  }
+  .auth-actions{
+    flex:0 0 auto;
+    max-width:none;
+    gap:3px;
+    flex-wrap:nowrap;
+  }
+  .auth-actions .btn{
+    min-width:0;
+    padding:5px 7px;
+    font-size:10px;
+    line-height:1.1;
+  }
+
+  /* Keep the AI composer visible at the bottom of a near-fullscreen chat. */
+  .chat-panel{
+    top:max(8px,env(safe-area-inset-top));
+    left:8px;
+    right:8px;
+    bottom:max(8px,env(safe-area-inset-bottom));
+    width:auto;
+    height:auto;
+    max-height:none;
+    border-radius:16px;
+  }
+  .chat-head{flex:0 0 auto;padding:11px 13px}
+  .chat-messages{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+  .chips{
+    flex:0 0 auto;
+    max-width:100%;
+    overflow-x:auto;
+    flex-wrap:nowrap;
+  }
+  .chat-form{
+    flex:0 0 auto;
+    padding:10px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  }
+  .chat-form input{
+    min-height:44px;
+    font-size:16px;
+  }
+  .chat-form button{width:44px;height:44px;flex:0 0 44px}
+}
+
+@media(max-width:380px){
+  .topbar{gap:4px}
+  .brand-logo{width:26px;height:26px}
+  .main-nav a{padding-inline:2px;font-size:9px}
+  .searchbox,.searchbox:focus-within{flex-basis:24px;width:24px}
+  .auth-actions .btn{padding:4px 5px;font-size:9px}
+}
