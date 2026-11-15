@@ -512,6 +512,7 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
 /* ---------- copyright notices ---------- */
 app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) => {
   const b = req.body || {};
+  if (!process.env.COPYRIGHT_EMAIL || !process.env.RESEND_API_KEY || !process.env.MAIL_FROM) throw httpError(503, "Copyright reporting is not configured. Please contact the site operator through the published contact details.");
   const noticeType = text(b.noticeType, 30);
   const reporterName = text(b.reporterName, 255);
   const reporterIdentifier = text(b.reporterIdentifier, 120);
@@ -548,6 +549,16 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
 app.get("/api/admin/copyright-reports", auth, adminOnly, wrap(async (_req, res) => {
   const [reports] = await pool.query("SELECT * FROM copyright_reports ORDER BY created_at DESC LIMIT 100");
   res.json({ reports });
+}));
+
+
+app.patch("/api/admin/copyright-reports/:id(\\d+)", auth, adminOnly, wrap(async (req, res) => {
+  const status = text(req.body?.status, 30);
+  const note = text(req.body?.adminNote, 3000) || null;
+  if (!["received", "reviewing", "removed", "rejected", "restored"].includes(status)) throw httpError(400, "Invalid report status.");
+  const [result] = await pool.query("UPDATE copyright_reports SET status = ?, admin_note = ?, handled_at = CASE WHEN ? IN ('removed','rejected','restored') THEN UTC_TIMESTAMP() ELSE NULL END WHERE id = ?", [status, note, status, req.params.id]);
+  if (!result.affectedRows) throw httpError(404, "Copyright report not found.");
+  res.json({ message: "Copyright report updated." });
 }));
 
 /* ---------- fallbacks ---------- */
