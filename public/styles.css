@@ -351,7 +351,6 @@ footer{display:flex;gap:20px;align-items:center;justify-content:space-between;fl
     width:0;
     height:0;
   }
-  .main-nav a[data-nav="home"],#registerBtn{display:none!important}
 }
 
 
@@ -459,4 +458,263 @@ body.player-open .chat-panel{
   a.card > *{pointer-events:none}
   .row-track{touch-action:pan-x pan-y}
   .hero-actions a{touch-action:manipulation}
+}
+
+
+/* Mobile header: two balanced rows with all sections visible and equal-width navigation. */
+@media(max-width:700px){
+  .topbar{
+    position:sticky;
+    top:0;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);
+    grid-template-areas:"brand actions" "nav nav";
+    align-items:center;
+    gap:8px 10px;
+    width:100%;
+    min-height:0;
+    padding:8px var(--pad);
+  }
+  .brand{
+    grid-area:brand;
+    display:flex;
+    min-width:0;
+    align-items:center;
+    gap:6px;
+  }
+  .brand-logo{width:28px;height:28px;flex:0 0 28px}
+  .brand-text{
+    display:block;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:clamp(13px,3.8vw,16px);
+    line-height:1.1;
+  }
+  .header-actions{
+    grid-area:actions;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:6px;
+    width:100%;
+    min-width:0;
+    margin:0;
+  }
+  .searchbox,
+  .searchbox:focus-within{
+    flex:0 0 30px;
+    width:30px;
+    height:32px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:0;
+    padding:0;
+    border:0;
+    border-radius:50%;
+    background:transparent;
+  }
+  .searchbox svg{width:19px;height:19px;flex:0 0 19px}
+  .searchbox input{display:none}
+  .searchbox.is-open{
+    position:absolute;
+    z-index:45;
+    top:calc(100% + 5px);
+    left:var(--pad);
+    right:var(--pad);
+    width:auto;
+    max-width:none;
+    height:44px;
+    display:flex;
+    justify-content:flex-start;
+    gap:9px;
+    padding:0 13px;
+    border:1px solid rgba(255,140,0,.55);
+    border-radius:13px;
+    background:var(--panel);
+    box-shadow:0 14px 34px rgba(0,0,0,.65);
+  }
+  .searchbox.is-open input{
+    display:block;
+    flex:1 1 auto;
+    width:100%;
+    min-width:0;
+    font-size:16px;
+  }
+  .auth-actions{
+    display:flex;
+    flex:1 1 0;
+    justify-content:stretch;
+    min-width:0;
+    max-width:none;
+    gap:5px;
+    flex-wrap:nowrap;
+  }
+  .auth-actions .btn{
+    display:flex;
+    flex:1 1 0;
+    min-width:0;
+    max-width:none;
+    justify-content:center;
+    padding:6px clamp(5px,1.8vw,10px);
+    font-size:clamp(10px,2.8vw,11px);
+    line-height:1.15;
+    white-space:nowrap;
+  }
+  .main-nav{
+    grid-area:nav;
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    align-items:stretch;
+    justify-content:stretch;
+    gap:5px;
+    width:100%;
+    max-width:none;
+    min-width:0;
+    margin:0;
+    padding:0;
+    overflow:visible;
+    white-space:normal;
+  }
+  .main-nav a{
+    display:flex!important;
+    flex:initial;
+    align-items:center;
+    justify-content:center;
+    min-width:0;
+    width:100%;
+    padding:8px 2px;
+    border-radius:10px;
+    text-align:center;
+    font-size:clamp(10px,3vw,12px);
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  .main-nav::-webkit-scrollbar{display:none}
+}
+@media(max-width:380px){
+  .topbar{gap:7px 7px;padding-inline:12px}
+  .brand{gap:4px}
+  .brand-logo{width:25px;height:25px;flex-basis:25px}
+  .brand-text{font-size:12px}
+  .header-actions{gap:3px}
+  .searchbox,.searchbox:focus-within{flex-basis:26px;width:26px}
+  .auth-actions{gap:3px}
+  .auth-actions .btn{padding:5px 4px;font-size:9px}
+  .main-nav{gap:3px}
+  .main-nav a{padding:7px 1px;font-size:9px}
+}
+
+/* Mobile player: comfortable edge-to-edge viewing with safe-area aware controls. */
+@media(max-width:700px), (pointer:coarse){
+  body.player-open{
+    width:100%;
+    height:100%;
+    overflow:hidden!important;
+    overscroll-behavior:none;
+    touch-action:pan-x pan-y;
+    background:#000;
+  }
+  body.player-open .site-bg,
+  body.player-open footer{display:none!important}
+  .player.player-mobile-fullscreen{
+    position:fixed!important;
+    inset:0!important;
+    z-index:120!important;
+    width:100vw!important;
+    width:100dvw!important;
+    max-width:none!important;
+    height:100vh!important;
+    height:100dvh!important;
+    max-height:none!important;
+    min-height:0!important;
+    aspect-ratio:auto!important;
+    margin:0!important;
+    padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)!important;
+    border:0!important;
+    border-radius:0!important;
+    background:#000!important;
+    overflow:hidden!important;
+  }
+  .player.player-mobile-fullscreen .player-media{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    max-width:100%;
+    max-height:100%;
+    object-fit:contain;
+    border:0;
+    background:#000;
+  }
+  .player-fullscreen-close{
+    position:absolute;
+    z-index:30;
+    top:calc(env(safe-area-inset-top,0px) + 12px);
+    right:calc(env(safe-area-inset-right,0px) + 12px);
+    width:44px;
+    height:44px;
+    display:grid;
+    place-items:center;
+    border:1px solid rgba(255,255,255,.28);
+    border-radius:50%;
+    background:rgba(0,0,0,.72);
+    color:#fff;
+    font-size:30px;
+    line-height:1;
+    cursor:pointer;
+    touch-action:manipulation;
+  }
+  .player-start-overlay{
+    position:absolute;
+    z-index:20;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    border:0;
+    background:rgba(0,0,0,.25);
+    color:#fff;
+    cursor:pointer;
+    touch-action:manipulation;
+  }
+  .player-start-icon{
+    width:72px;
+    height:72px;
+    display:grid;
+    place-items:center;
+    padding-left:5px;
+    border-radius:50%;
+    background:var(--orange);
+    color:#111;
+    font-size:28px;
+    box-shadow:0 0 0 12px rgba(255,140,0,.18);
+  }
+  .player-start-overlay b{font-size:16px;font-weight:700}
+  .player-start-overlay small{font-size:12px;color:rgba(255,255,255,.72)}
+  .player-loading{
+    position:absolute;
+    inset:0;
+    min-height:100%;
+    display:grid;
+    align-content:center;
+    justify-items:center;
+    gap:14px;
+    padding:24px;
+    background:#000;
+    color:#eee;
+  }
+  .player-loading p{font-size:14px;text-align:center}
+}
+
+/* Wide orientation uses the entire display; portrait keeps the movie letterboxed without cropping. */
+@media(max-width:700px) and (orientation:landscape){
+  .player.player-mobile-fullscreen video,
+  .player.player-mobile-fullscreen iframe{object-fit:contain}
 }
