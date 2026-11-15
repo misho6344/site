@@ -492,10 +492,11 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
     .filter(m => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string")
     .slice(-8).map(m => ({ role: m.role, content: m.content.slice(0, 1500) }));
 
+
   const [movies] = await pool.query(
     "SELECT title_en, title_ka, release_year, imdb_rating, genre FROM movies ORDER BY imdb_rating DESC LIMIT 60");
-  const catalog = movies.map(m => `${m.title_en} | ${m.title_ka || "-"} | ${m.release_year || "?"} | ${m.imdb_rating ?? "N/A"} | ${m.genre || "-"}`).join("
-");
+  const catalog = movies.map(m => `${m.title_en} | ${m.title_ka || "-"} | ${m.release_year || "?"} | ${m.imdb_rating ?? "N/A"} | ${m.genre || "-"}`).join("\n");
+  
 
   let result = { type: "off_topic", reply: OFF_TOPIC_REPLY };
   try {
