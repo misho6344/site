@@ -667,6 +667,39 @@ app.use((err, _req, res, _next) => {
       console.error("Attack on Titan trailer setup skipped:", error.message);
     }
 
+    try {
+      const officialTrailers = require("./seed/movies.json").filter(movie =>
+        ["tt12299608", "tt14849194"].includes(movie.imdbId) &&
+        movie.videoUrl && movie.videoType === "trailer"
+      );
+      for (const trailer of officialTrailers) {
+        const [existing] = await pool.query(
+          "SELECT id, video_rights_basis FROM movies WHERE imdb_id = ?",
+          [trailer.imdbId]
+        );
+        if (!existing.length) {
+          await upsertMovie(pool, trailer);
+          console.log(`Added ${trailer.imdbId} with its official studio trailer.`);
+        } else if (!existing[0].video_rights_basis) {
+          const [updated] = await pool.query(
+            `UPDATE movies
+             SET video_url = ?, video_type = 'trailer', video_rights_basis = ?,
+                 video_rights_evidence = ?, video_license_url = ?, video_attribution = ?
+             WHERE imdb_id = ? AND video_rights_basis IS NULL`,
+            [
+              trailer.videoUrl, trailer.videoRightsBasis, trailer.videoRightsEvidence,
+              trailer.videoLicenseUrl, trailer.videoAttribution, trailer.imdbId
+            ]
+          );
+          if (updated.affectedRows) {
+            console.log(`Restored ${trailer.imdbId} with its official studio trailer.`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Official studio trailer setup skipped:", error.message);
+    }
+
     if (production && !sharedRateLimitEnabled) {
       console.warn("DDoS hardening: rate limits are process-local. Configure both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to share counters across instances.");
     }
