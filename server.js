@@ -66,6 +66,7 @@ const commentLimiter = limiter("comments", 10 * 60 * 1000, 20, "You are commenti
 const assistantLimiter = limiter("assistant", 5 * 60 * 1000, 6, "The assistant request limit has been reached. Please wait a few minutes.");
 const archiveVideoLimiter = limiter("archive-video", 60 * 1000, 10, "Too many video metadata requests. Please try again shortly.");
 const catalogueLimiter = limiter("catalogue", 60 * 1000, 60, "Too many catalogue requests. Please try again shortly.");
+const copyrightReportLimiter = limiter("copyright-report", 60 * 60 * 1000, 5, "Too many copyright reports. Please try again later.");
 
 app.use(globalLimiter);
 app.use("/api", apiLimiter);
