@@ -590,7 +590,13 @@ app.use((error, req, res, next) => {
 async function start() {
   pool = createPool();
   await initSchema(pool);
-  http.createServer(app).listen(PORT, () => {
+
+  const server = http.createServer(app);
+  server.headersTimeout = 10_000;
+  server.requestTimeout = 30_000;
+  server.maxHeadersCount = 50;
+
+  server.listen(PORT, () => {
     console.log(`NoAdFrame server running on http://localhost:${PORT}`);
   });
 }
