@@ -133,9 +133,9 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 const text = (value, max) => String(value ?? "").trim().slice(0, max);
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{3,30}$/u;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const likeEscape = (s) => s.replace(/[\\%_]/g, "\\$&");
+const likeEscape = (s) => s.replace(/[\%_]/g, "\$&");
 
-const RETIRED_VIDEO_IMDB_IDS = new Set(["tt12299608", "tt14849194", "tt33175825"]);
+const RETIRED_VIDEO_IMDB_IDS = new Set();
 
 function suppressRetiredVideos(rows) {
   return rows.map((row) => {
@@ -182,8 +182,6 @@ app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`);
   if (!response.ok) throw httpError(502, "Archive.org metadata could not be loaded.");
   const metadata = await response.json();
-  // Native browser formats only. MKV is deliberately excluded because HTML5 video
-  // playback is not consistently supported for Matroska files across browsers.
   const files = (metadata.files || []).filter(f => {
     const name = String(f.name || "");
     const format = String(f.format || "").toLowerCase();
@@ -388,7 +386,7 @@ app.get("/api/genres", wrap(async (_req, res) => {
   });
 }));
 
-app.get("/api/movies/:id(\\d+)", wrap(async (req, res) => {
+app.get("/api/movies/:id(\d+)", wrap(async (req, res) => {
   const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [req.params.id]);
   if (!rows.length) throw httpError(404, "Movie not found.");
   pool.query("UPDATE movies SET views = views + 1 WHERE id = ?", [req.params.id]).catch(() => {});
@@ -396,7 +394,7 @@ app.get("/api/movies/:id(\\d+)", wrap(async (req, res) => {
 }));
 
 /* ---------- comments ---------- */
-app.get("/api/movies/:id(\\d+)/comments", wrap(async (req, res) => {
+app.get("/api/movies/:id(\d+)/comments", wrap(async (req, res) => {
   const order = req.query.sort === "oldest" ? "ASC" : "DESC";
   const [rows] = await pool.query(
     `SELECT c.id, c.comment, c.created_at, c.user_id, u.username AS author
@@ -405,7 +403,7 @@ app.get("/api/movies/:id(\\d+)/comments", wrap(async (req, res) => {
   res.json({ comments: rows });
 }));
 
-app.post("/api/movies/:id(\\d+)/comments", auth, commentLimiter, wrap(async (req, res) => {
+app.post("/api/movies/:id(\d+)/comments", auth, commentLimiter, wrap(async (req, res) => {
   const comment = text(req.body?.comment ?? req.body?.body, 1200);
   if (!comment) throw httpError(400, "Comment must contain 1–1200 characters.");
   const [movie] = await pool.query("SELECT id FROM movies WHERE id = ?", [req.params.id]);
@@ -414,7 +412,7 @@ app.post("/api/movies/:id(\\d+)/comments", auth, commentLimiter, wrap(async (req
   res.status(201).json({ id: result.insertId, message: "Comment posted." });
 }));
 
-app.delete("/api/comments/:id(\\d+)", auth, wrap(async (req, res) => {
+app.delete("/api/comments/:id(\d+)", auth, wrap(async (req, res) => {
   const [rows] = await pool.query("SELECT user_id FROM comments WHERE id = ?", [req.params.id]);
   if (!rows.length) throw httpError(404, "Comment not found.");
   if (rows[0].user_id !== req.user.id && !isAdmin(req.user)) throw httpError(403, "You can only delete your own comments.");
@@ -451,7 +449,7 @@ app.post("/api/admin/movies", auth, adminOnly, wrap(async (req, res) => {
   res.status(201).json({ movie, message: "Movie saved." });
 }));
 
-app.delete("/api/admin/movies/:id(\\d+)", auth, adminOnly, wrap(async (req, res) => {
+app.delete("/api/admin/movies/:id(\d+)", auth, adminOnly, wrap(async (req, res) => {
   await pool.query("DELETE FROM comments WHERE movie_id = ?", [req.params.id]);
   await pool.query("DELETE FROM movies WHERE id = ?", [req.params.id]);
   res.json({ message: "Movie deleted." });
@@ -496,7 +494,8 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
 
   const [movies] = await pool.query(
     "SELECT title_en, title_ka, release_year, imdb_rating, genre FROM movies ORDER BY imdb_rating DESC LIMIT 60");
-  const catalog = movies.map(m => `${m.title_en} | ${m.title_ka || "-"} | ${m.release_year || "?"} | ${m.imdb_rating ?? "N/A"} | ${m.genre || "-"}`).join("\n");
+  const catalog = movies.map(m => `${m.title_en} | ${m.title_ka || "-"} | ${m.release_year || "?"} | ${m.imdb_rating ?? "N/A"} | ${m.genre || "-"}`).join("
+");
 
   let result = { type: "off_topic", reply: OFF_TOPIC_REPLY };
   try {
@@ -549,181 +548,35 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
   if (supportingUrl && !/^https:\/\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
   const [saved] = await pool.query(
     `INSERT INTO copyright_reports
-      (notice_type, reporter_name, reporter_identifier, reporter_address, reporter_phone, reporter_email, work_description, claim_basis, reported_urls, supporting_url)
+     (notice_type, reporter_name, reporter_identifier, reporter_address, reporter_phone, reporter_email, work_description, claim_basis, reported_urls, supporting_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [noticeType, reporterName, reporterIdentifier, reporterAddress, reporterPhone, reporterEmail, workDescription, claimBasis, reportedUrls, supportingUrl]
   );
   const recipient = process.env.COPYRIGHT_EMAIL;
   if (recipient && process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
-    const emailBody = [`Report #${saved.insertId}`, noticeType, reporterName, reporterEmail, reporterPhone, reporterIdentifier, reporterAddress, workDescription, claimBasis, reportedUrls, supportingUrl || ""].join("\\n\\n");
-    void fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: process.env.MAIL_FROM, to: [recipient], reply_to: reporterEmail, subject: `NoAdFrame rights notice #${saved.insertId}`, text: emailBody })
-    }).then(r => { if (!r.ok) console.error("Copyright notice email failed:", r.status); })
-      .catch(e => console.error("Copyright notice email failed:", e.message));
-  }
-  res.status(201).json({ reportId: saved.insertId, message: "Your notice has been received for review." });
-}));
-
-app.get("/api/admin/copyright-reports", auth, adminOnly, wrap(async (_req, res) => {
-  const [reports] = await pool.query("SELECT * FROM copyright_reports ORDER BY created_at DESC LIMIT 100");
-  res.json({ reports });
-}));
-
-
-app.patch("/api/admin/copyright-reports/:id(\\d+)", auth, adminOnly, wrap(async (req, res) => {
-  const status = text(req.body?.status, 30);
-  const note = text(req.body?.adminNote, 3000) || null;
-  if (!["received", "reviewing", "removed", "rejected", "restored"].includes(status)) throw httpError(400, "Invalid report status.");
-  const [result] = await pool.query("UPDATE copyright_reports SET status = ?, admin_note = ?, handled_at = CASE WHEN ? IN ('removed','rejected','restored') THEN UTC_TIMESTAMP() ELSE NULL END WHERE id = ?", [status, note, status, req.params.id]);
-  if (!result.affectedRows) throw httpError(404, "Copyright report not found.");
-  const [rows] = await pool.query("SELECT reporter_email, reporter_name, status, admin_note, id FROM copyright_reports WHERE id = ?", [req.params.id]);
-  const report = rows[0];
-  if (report && process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
     void fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: process.env.MAIL_FROM,
-        to: [report.reporter_email],
-        subject: `NoAdFrame rights notice #${report.id}: ${report.status}`,
-        text: [`Hello ${report.reporter_name},`, `Your notice status is now: ${report.status}.`, report.admin_note || "", "NoAdFrame"].filter(Boolean).join("\\n\\n")
+        to: [recipient],
+        subject: `[NoAdFrame Notice] ${noticeType.toUpperCase()} report #${saved.insertId}`,
+        html: `<p>New notice received.</p><p><b>Type:</b> ${noticeType}</p><p><b>Reporter:</b> ${reporterName} (${reporterEmail})</p>`
       })
-    }).then(r => { if (!r.ok) console.error("Copyright notice response email failed:", r.status); })
-      .catch(e => console.error("Copyright notice response email failed:", e.message));
+    }).catch(err => console.error("Copyright report email error:", err.message));
   }
-  res.json({ message: "Copyright report updated." });
+  res.status(201).json({ message: "Notice submitted successfully. Thank you." });
 }));
 
-/* ---------- fallbacks ---------- */
-app.use("/api", (_req, _res, next) => next(httpError(404, "Not found.")));
-app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+async function start() {
+  pool = createPool();
+  await initSchema(pool);
+  http.createServer(app).listen(PORT, () => {
+    console.log(`NoAdFrame server running on http://localhost:${PORT}`);
+  });
+}
 
-app.use((err, _req, res, _next) => {
-  if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid JSON." });
-  if (err.type === "entity.too.large") return res.status(413).json({ error: "Request body is too large." });
-  if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
-  console.error(err);
-  res.status(err.status || 500).json({ error: err.status === 502 || err.status === 503 ? err.message : "Something went wrong on the server." });
+start().catch(err => {
+  console.error("Failed to start server:", err);
+  process.exit(err.origin || err);
 });
-
-(async () => {
-  try {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) throw new Error("JWT_SECRET is missing or too short (use 32+ random characters).");
-    if (production && (!process.env.RESEND_API_KEY || !process.env.MAIL_FROM || !process.env.APP_BASE_URL)) throw new Error("Production password reset email requires RESEND_API_KEY, MAIL_FROM and APP_BASE_URL.");
-    if (production) {
-      const appUrl = new URL(process.env.APP_BASE_URL);
-      if (appUrl.protocol !== "https:") throw new Error("APP_BASE_URL must use HTTPS in production.");
-      if (process.env.PASSWORD_RESET_URL && new URL(process.env.PASSWORD_RESET_URL).protocol !== "https:") throw new Error("PASSWORD_RESET_URL must use HTTPS in production.");
-    }
-    pool = createPool();
-    await initSchema(pool);
-
-    try {
-      const lastAttackTrailer = require("./seed/movies.json").find(movie => movie.imdbId === "tt33175825");
-      if (lastAttackTrailer?.videoUrl) {
-        const [existing] = await pool.query(
-          "SELECT id, video_rights_basis FROM movies WHERE imdb_id = ?",
-          [lastAttackTrailer.imdbId]
-        );
-        if (!existing.length) {
-          await upsertMovie(pool, lastAttackTrailer);
-          console.log("Added Attack on Titan: The Last Attack with its official trailer.");
-        } else if (!existing[0].video_rights_basis) {
-          const [updated] = await pool.query(
-            `UPDATE movies
-             SET video_url = ?, video_type = ?, video_rights_basis = ?, video_rights_evidence = ?,
-                 video_license_url = ?, video_attribution = ?
-             WHERE imdb_id = ? AND video_rights_basis IS NULL`,
-            [
-              lastAttackTrailer.videoUrl, lastAttackTrailer.videoType || "trailer",
-              lastAttackTrailer.videoRightsBasis, lastAttackTrailer.videoRightsEvidence,
-              lastAttackTrailer.videoLicenseUrl, lastAttackTrailer.videoAttribution,
-              lastAttackTrailer.imdbId
-            ]
-          );
-          if (updated.affectedRows) console.log("Replaced the unverified Attack on Titan player URL with the official trailer.");
-        }
-      }
-
-      // Fill the Georgian synopsis and official trailer preview on existing rows too.
-      // Never replace a movie video, poster or description that already has recorded rights.
-      const originalSynopsis = lastAttackTrailer.description;
-      const synopsisEvidence = lastAttackTrailer.descriptionRightsEvidence;
-      await pool.query(
-        `UPDATE movies SET
-           title_ka = ?,
-           description = IF(description_rights_basis IS NULL, ?, description),
-           description_rights_evidence = IF(description_rights_basis IS NULL, ?, description_rights_evidence),
-           description_rights_basis = COALESCE(description_rights_basis, ?),
-           poster_url = IF(poster_rights_basis IS NULL, ?, poster_url),
-           poster_rights_evidence = IF(poster_rights_basis IS NULL, ?, poster_rights_evidence),
-           poster_license_url = IF(poster_rights_basis IS NULL, ?, poster_license_url),
-           poster_attribution = IF(poster_rights_basis IS NULL, ?, poster_attribution),
-           poster_rights_basis = COALESCE(poster_rights_basis, ?)
-         WHERE imdb_id = ?`,
-        [
-          lastAttackTrailer.titleKa,
-          originalSynopsis, synopsisEvidence, lastAttackTrailer.descriptionRightsBasis,
-          lastAttackTrailer.posterUrl, lastAttackTrailer.posterRightsEvidence,
-          lastAttackTrailer.posterLicenseUrl, lastAttackTrailer.posterAttribution,
-          lastAttackTrailer.posterRightsBasis,
-          lastAttackTrailer.imdbId
-        ]
-      );
-    } catch (error) {
-      console.error("Attack on Titan trailer setup skipped:", error.message);
-    }
-
-    try {
-      const officialTrailers = require("./seed/movies.json").filter(movie =>
-        ["tt12299608", "tt14849194"].includes(movie.imdbId) &&
-        movie.videoUrl && movie.videoType === "trailer"
-      );
-      for (const trailer of officialTrailers) {
-        const [existing] = await pool.query(
-          "SELECT id, video_rights_basis FROM movies WHERE imdb_id = ?",
-          [trailer.imdbId]
-        );
-        if (!existing.length) {
-          await upsertMovie(pool, trailer);
-          console.log(`Added ${trailer.imdbId} with its official studio trailer.`);
-        } else if (!existing[0].video_rights_basis) {
-          const [updated] = await pool.query(
-            `UPDATE movies
-             SET video_url = ?, video_type = 'trailer', video_rights_basis = ?,
-                 video_rights_evidence = ?, video_license_url = ?, video_attribution = ?
-             WHERE imdb_id = ? AND video_rights_basis IS NULL`,
-            [
-              trailer.videoUrl, trailer.videoRightsBasis, trailer.videoRightsEvidence,
-              trailer.videoLicenseUrl, trailer.videoAttribution, trailer.imdbId
-            ]
-          );
-          if (updated.affectedRows) {
-            console.log(`Restored ${trailer.imdbId} with its official studio trailer.`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Official studio trailer setup skipped:", error.message);
-    }
-
-    if (production && !sharedRateLimitEnabled) {
-      console.warn("DDoS hardening: rate limits are process-local. Configure both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to share counters across instances.");
-    }
-    if (production && !originAccessToken) {
-      console.warn("DDoS hardening: ORIGIN_ACCESS_TOKEN is not set. Requests may reach the Render origin without passing through Cloudflare WAF rules.");
-    }
-
-    const server = http.createServer({ maxHeaderSize: 8 * 1024 }, app);
-    server.headersTimeout = 10_000;
-    server.requestTimeout = 30_000;
-    server.keepAliveTimeout = 5_000;
-    server.maxHeadersCount = 50;
-    server.listen(PORT, () => console.log(`NoAdFrame server running on http://localhost:${PORT}`));
-  } catch (error) {
-    console.error("Startup failed:", error.message);
-    process.exit(1);
-  }
-})();
