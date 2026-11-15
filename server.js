@@ -196,32 +196,60 @@ app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
     res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
     return res.json({ videoUrl: cached.videoUrl });
   }
-  const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`);
+
+  const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`, {
+    signal: AbortSignal.timeout(15000)
+  });
   if (!response.ok) throw httpError(502, "Archive.org metadata could not be loaded.");
   const metadata = await response.json();
   const files = (metadata.files || []).filter(f => {
     const name = String(f.name || "");
     const format = String(f.format || "").toLowerCase();
     return name && /\.(mp4|m4v|webm)$/i.test(name) &&
-      !name.endsWith("_thumb.jpg") && !name.endsWith("_sample.mp4") &&
-      !name.endsWith("_preview.mp4") && !/metadata|thumbnail/.test(format);
+      !/_thumb\.jpg$/i.test(name) && !/_sample\.mp4$/i.test(name) &&
+      !/_preview\.mp4$/i.test(name) && !/metadata|thumbnail/.test(format);
   });
-  files.sort((a, b) => {
+
+  const playableFiles = files.filter(f => {
+    const name = String(f.name || "").toLowerCase();
+    const format = String(f.format || "").toLowerCase();
+    const codec = `${name} ${format}`;
+    const explicitlyH264 = /h\.?264|avc/.test(format);
+    const explicitlyHevc = /hevc|h\.?265|x265/.test(codec);
+    return !explicitlyHevc || explicitlyH264;
+  });
+
+  if (!playableFiles.length) {
+    if (files.length) {
+      throw httpError(415, "This Archive.org item only exposes HEVC/H.265 video files. A phone-compatible H.264 version is not available.");
+    }
+    throw httpError(404, "No MP4, M4V, or WebM video file is available in this Archive.org item.");
+  }
+
+  playableFiles.sort((a, b) => {
     const score = f => {
-      const name = f.name.toLowerCase();
-      return (name.includes("ge-dubbed") ? 100 : 0) +
-        (name.endsWith(".mp4") ? 30 : name.endsWith(".m4v") ? 20 : 10) +
-        (f.source === "original" ? 2 : 0) +
-        (Number(f.size) > 0 ? 1 : 0);
+      const name = String(f.name || "").toLowerCase();
+      const format = String(f.format || "").toLowerCase();
+      let value = 0;
+      if (/ge[-_ ]dubbed|georgian|geo[-_ ]dub/.test(name)) value += 1000;
+      if (/h\.?264|avc/.test(format)) value += 800;
+      if (/(?:\.ia|_512kb)\.mp4$/i.test(name)) value += 500;
+      if (f.source === "derivative") value += 80;
+      if (name.endsWith(".mp4")) value += 30;
+      else if (name.endsWith(".m4v")) value += 20;
+      else value += 10;
+      if (Number(f.size) > 0) value += 1;
+      return value;
     };
     return score(b) - score(a);
   });
-  if (!files.length) throw httpError(404, "No browser-compatible MP4, M4V, or WebM video file is available in this Archive.org item.");
-  const name = files[0].name.split("/").map(encodeURIComponent).join("/");
+
+  const selected = playableFiles[0];
+  const name = selected.name.split("/").map(encodeURIComponent).join("/");
   const videoUrl = `https://archive.org/download/${encodeURIComponent(identifier)}/${name}`;
   archiveVideoCache.set(identifier, { videoUrl, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
   res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-  res.json({ videoUrl });
+  res.json({ videoUrl, format: selected.format || null });
 }));
 
 app.get("/api/health", healthLimiter, wrap(async (_req, res) => {
