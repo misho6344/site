@@ -45,6 +45,14 @@
     "videoRightsBasis": "official_embed",
     "videoRightsEvidence": "The official Attack on Titan portal identifies this exact YouTube video as the official trailer: https://aot-portal.com/en/movie_gallery/gekijouban-shingeki-no-kyojin-kanketsu-hen-the-last-attack-hon-yokoku/ . It is published by Pony Canyon's verified YouTube channel: https://www.youtube.com/watch?v=PuE1uRbpkTk",
     "videoLicenseUrl": "https://www.youtube.com/t/terms",
-    "videoAttribution": "Official trailer published by Pony Canyon for Attack on Titan: The Last Attack. Embedded from the verified Pony Canyon YouTube channel; this is a trailer, not the full movie."
+    "videoAttribution": "Official trailer published by Pony Canyon for Attack on Titan: The Last Attack. Embedded from the verified Pony Canyon YouTube channel; this is a trailer, not the full movie.",
+    "description": "კაცობრიობის ბედის განმსაზღვრელ ბრძოლაში ერენ იეგერი იწყებს „მიწის ზანზარს“ და კოლოსალური ტიტანების ლაშქარი მსოფლიოს განადგურებით ემუქრება. მიკასა, არმინი და მათი თანამებრძოლები უკანასკნელ ძალებს იკრებენ, რათა ერენი შეაჩერონ. ფილმი აერთიანებს „Attack on Titan: The Final Season – The Final Chapters“-ის ორ ფინალურ ნაწილს, კინოვერსიისთვის განახლებული ვიზუალითა და 5.1-არხიანი ხმით.",
+    "descriptionRightsBasis": "original",
+    "descriptionRightsEvidence": "Original Georgian synopsis written for NoAdFrame from the official Attack on Titan Portal synopsis and film introduction: https://aot-portal.com/en/animation/movie-the-last-attack/",
+    "posterUrl": "https://img.youtube.com/vi/PuE1uRbpkTk/hqdefault.jpg",
+    "posterRightsBasis": "official_embed",
+    "posterRightsEvidence": "Unmodified YouTube thumbnail preview for Pony Canyon's official trailer. It is used only as the preview image linked to the corresponding embedded official trailer: https://www.youtube.com/watch?v=PuE1uRbpkTk ; official trailer listing: https://aot-portal.com/en/movie_gallery/gekijouban-shingeki-no-kyojin-kanketsu-hen-the-last-attack-hon-yokoku/",
+    "posterLicenseUrl": "https://support.google.com/youtube/answer/171780?hl=en",
+    "posterAttribution": "Official Pony Canyon trailer preview thumbnail from YouTube, displayed unmodified and linked to the official embedded trailer."
   }
 ]
