@@ -64,7 +64,7 @@ function posterImg(m) {
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
 function cardHTML(m) {
-  const hasVideo = !!safeUrl(m.video_url);
+  const hasVideo = !!(m.has_video_source || safeUrl(m.video_url));
   const href = hasVideo && m.video_type === "trailer"
     ? `#/movie/${m.id}/play`
     : `#/movie/${m.id}`;
