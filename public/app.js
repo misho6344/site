@@ -319,7 +319,7 @@ function mountPlayer() {
   if (!embed) { box.innerHTML = `<div class="player-note"><p>${url ? "This video source is not supported by the player." : "Video is not available for this title yet."}</p></div>`; return; }
   box.innerHTML = embed.type === "video"
     ? `<video controls autoplay src="${esc(embed.src)}"></video>`
-    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"></iframe>`;
+    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
   const video = box.querySelector("video");
   if (video) {
     const resumeAt = playbackPositions.get(String(currentMovie.id));
