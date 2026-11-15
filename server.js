@@ -333,7 +333,12 @@ app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
   const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
   const safeOffset = (safePage - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT m.* FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
+    `SELECT m.*,
+       CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
+       CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
+       CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
+       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description
+     FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
     [...params, limit, safeOffset]
   );
   res.json({ ...paginationMeta(safePage, limit, total), movies: rows });
@@ -345,7 +350,7 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
     run("m.views DESC, m.imdb_rating DESC"),
     run("m.imdb_rating DESC, m.views DESC"),
     run("m.release_year DESC, m.created_at DESC"),
-    pool.query("SELECT * FROM movies WHERE LOWER(title_en) LIKE '%mickey 17%' OR LOWER(title_en) LIKE '%the holdovers%' ORDER BY CASE WHEN LOWER(title_en) LIKE '%mickey 17%' THEN 0 ELSE 1 END LIMIT 2")
+    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
   res.json({ featured: featuredRows, popular, topRated, newReleases });
 }));
@@ -365,7 +370,7 @@ app.get("/api/genres", wrap(async (_req, res) => {
 }));
 
 app.get("/api/movies/:id(\\d+)", wrap(async (req, res) => {
-  const [rows] = await pool.query("SELECT * FROM movies WHERE id = ?", [req.params.id]);
+  const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [req.params.id]);
   if (!rows.length) throw httpError(404, "Movie not found.");
   pool.query("UPDATE movies SET views = views + 1 WHERE id = ?", [req.params.id]).catch(() => {});
   res.json({ movie: rows[0] });
@@ -406,7 +411,22 @@ app.post("/api/admin/movies", auth, adminOnly, wrap(async (req, res) => {
     titleKa: text(b.titleKa, 255) || null,
     posterUrl: text(b.posterUrl, 2000) || null,
     backdropUrl: text(b.backdropUrl, 2000) || null,
-    videoUrl: text(b.videoUrl, 2000) || null
+    videoUrl: text(b.videoUrl, 2000) || null,
+    posterRightsBasis: text(b.posterRightsBasis, 40) || null,
+    posterRightsEvidence: text(b.posterRightsEvidence, 2000) || null,
+    posterLicenseUrl: text(b.posterLicenseUrl, 2000) || null,
+    posterAttribution: text(b.posterAttribution, 1000) || null,
+    backdropRightsBasis: text(b.backdropRightsBasis, 40) || null,
+    backdropRightsEvidence: text(b.backdropRightsEvidence, 2000) || null,
+    backdropLicenseUrl: text(b.backdropLicenseUrl, 2000) || null,
+    backdropAttribution: text(b.backdropAttribution, 1000) || null,
+    videoRightsBasis: text(b.videoRightsBasis, 40) || null,
+    videoRightsEvidence: text(b.videoRightsEvidence, 2000) || null,
+    videoLicenseUrl: text(b.videoLicenseUrl, 2000) || null,
+    videoAttribution: text(b.videoAttribution, 1000) || null,
+    description: text(b.description, 10000) || null,
+    descriptionRightsBasis: text(b.descriptionRightsBasis, 40) || null,
+    descriptionRightsEvidence: text(b.descriptionRightsEvidence, 2000) || null
   });
   res.status(201).json({ movie, message: "Movie saved." });
 }));
@@ -486,6 +506,48 @@ app.post("/api/assistant", assistantLimiter, optionalAuth, wrap(async (req, res)
     pool.query("INSERT INTO ai_feedback (user_id, message, reply) VALUES (?, ?, ?)", [req.user?.id || null, message, result.reply]).catch(() => {});
   }
   res.json({ reply: result.reply });
+}));
+
+
+/* ---------- copyright notices ---------- */
+app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) => {
+  const b = req.body || {};
+  const noticeType = text(b.noticeType, 30);
+  const reporterName = text(b.reporterName, 255);
+  const reporterIdentifier = text(b.reporterIdentifier, 120);
+  const reporterAddress = text(b.reporterAddress, 1000);
+  const reporterPhone = text(b.reporterPhone, 80);
+  const reporterEmail = text(b.reporterEmail, 254).toLowerCase();
+  const workDescription = text(b.workDescription, 3000);
+  const claimBasis = text(b.claimBasis, 3000);
+  const reportedUrls = text(b.reportedUrls, 4000);
+  const supportingUrl = text(b.supportingUrl, 2000) || null;
+  if (!["copyright", "trademark", "privacy", "other"].includes(noticeType)) throw httpError(400, "Choose a valid notice type.");
+  if (!reporterName || !reporterIdentifier || !reporterAddress || !reporterPhone || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(reporterEmail)) throw httpError(400, "Complete all reporter identity and contact fields.");
+  if (workDescription.length < 20 || claimBasis.length < 20 || reportedUrls.length < 8) throw httpError(400, "Provide a detailed description, legal basis and the exact URLs to review.");
+  if (supportingUrl && !/^https:\\/\\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
+  const [saved] = await pool.query(
+    `INSERT INTO copyright_reports
+      (notice_type, reporter_name, reporter_identifier, reporter_address, reporter_phone, reporter_email, work_description, claim_basis, reported_urls, supporting_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [noticeType, reporterName, reporterIdentifier, reporterAddress, reporterPhone, reporterEmail, workDescription, claimBasis, reportedUrls, supportingUrl]
+  );
+  const recipient = process.env.COPYRIGHT_EMAIL;
+  if (recipient && process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
+    const emailBody = [`Report #${saved.insertId}`, noticeType, reporterName, reporterEmail, reporterPhone, reporterIdentifier, reporterAddress, workDescription, claimBasis, reportedUrls, supportingUrl || ""].join("\\n\\n");
+    void fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: process.env.MAIL_FROM, to: [recipient], reply_to: reporterEmail, subject: `NoAdFrame rights notice #${saved.insertId}`, text: emailBody })
+    }).then(r => { if (!r.ok) console.error("Copyright notice email failed:", r.status); })
+      .catch(e => console.error("Copyright notice email failed:", e.message));
+  }
+  res.status(201).json({ reportId: saved.insertId, message: "Your notice has been received for review." });
+}));
+
+app.get("/api/admin/copyright-reports", auth, adminOnly, wrap(async (_req, res) => {
+  const [reports] = await pool.query("SELECT * FROM copyright_reports ORDER BY created_at DESC LIMIT 100");
+  res.json({ reports });
 }));
 
 /* ---------- fallbacks ---------- */
