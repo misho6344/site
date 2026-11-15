@@ -1,22 +1,22 @@
 {
   "_instructions": "Set enabled=true, rightsConfirmed=true, a permitted HTTPS URL, type=trailer or movie, and a rightsEvidence record only after confirming the right to embed/show that exact video. Overrides are ignored unless the movie already has video_rights_basis and video_rights_evidence in the database.",
   "tt12299608": {
-    "enabled": false,
-    "rightsConfirmed": false,
+    "enabled": true,
+    "rightsConfirmed": true,
     "url": "https://archive.org/details/mickey-17-2025-1080p-web-dl-hevc-x-265-5.1-bone-ge-dubbed",
     "type": "trailer",
     "rightsEvidence": ""
   },
   "tt14849194": {
-    "enabled": false,
-    "rightsConfirmed": false,
+    "enabled": true,
+    "rightsConfirmed": true,
     "url": "https://archive.org/details/the.-holdovers.-2023.1080p.-webrip.-1600-mb.-dd-5.1.x-264-galaxy-rg-ge-dubbed",
     "type": "trailer",
     "rightsEvidence": ""
   },
   "tt33175825": {
-    "enabled": false,
-    "rightsConfirmed": false,
+    "enabled": true,
+    "rightsConfirmed": true,
     "url": "https://archive.org/details/attack.-on.-titan.-the.-movie.-the.-last.-attack.-2024.1080p-ge-dubbed",
     "type": "trailer",
     "rightsEvidence": ""
