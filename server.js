@@ -346,12 +346,19 @@ app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
 }));
 
 app.get("/api/movies/categories", wrap(async (_req, res) => {
-  const run = (order) => pool.query(`SELECT m.* FROM movies m ORDER BY ${order} LIMIT 12`).then(([rows]) => rows);
+  const run = (order) => pool.query(
+    `SELECT m.*,
+       CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
+       CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
+       CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
+       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description
+     FROM movies m ORDER BY ${order} LIMIT 12`
+  ).then(([rows]) => rows);
   const [popular, topRated, newReleases, [featuredRows]] = await Promise.all([
     run("m.views DESC, m.imdb_rating DESC"),
     run("m.imdb_rating DESC, m.views DESC"),
     run("m.release_year DESC, m.created_at DESC"),
-    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
+    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
   res.json({ featured: featuredRows, popular, topRated, newReleases });
 }));
@@ -628,6 +635,32 @@ app.use((err, _req, res, _next) => {
           if (updated.affectedRows) console.log("Replaced the unverified Attack on Titan player URL with the official trailer.");
         }
       }
+
+      // Fill the Georgian synopsis and official trailer preview on existing rows too.
+      // Never replace a movie video, poster or description that already has recorded rights.
+      const originalSynopsis = lastAttackTrailer.description;
+      const synopsisEvidence = lastAttackTrailer.descriptionRightsEvidence;
+      await pool.query(
+        `UPDATE movies SET
+           title_ka = ?,
+           description = IF(description_rights_basis IS NULL, ?, description),
+           description_rights_evidence = IF(description_rights_basis IS NULL, ?, description_rights_evidence),
+           description_rights_basis = COALESCE(description_rights_basis, ?),
+           poster_url = IF(poster_rights_basis IS NULL, ?, poster_url),
+           poster_rights_evidence = IF(poster_rights_basis IS NULL, ?, poster_rights_evidence),
+           poster_license_url = IF(poster_rights_basis IS NULL, ?, poster_license_url),
+           poster_attribution = IF(poster_rights_basis IS NULL, ?, poster_attribution),
+           poster_rights_basis = COALESCE(poster_rights_basis, ?)
+         WHERE imdb_id = ?`,
+        [
+          lastAttackTrailer.titleKa,
+          originalSynopsis, synopsisEvidence, lastAttackTrailer.descriptionRightsBasis,
+          lastAttackTrailer.posterUrl, lastAttackTrailer.posterRightsEvidence,
+          lastAttackTrailer.posterLicenseUrl, lastAttackTrailer.posterAttribution,
+          lastAttackTrailer.posterRightsBasis,
+          lastAttackTrailer.imdbId
+        ]
+      );
     } catch (error) {
       console.error("Attack on Titan trailer setup skipped:", error.message);
     }
