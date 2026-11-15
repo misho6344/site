@@ -136,18 +136,21 @@ const USERNAME_RE = /^[\p{L}\p{N}_.-]{3,30}$/u;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const likeEscape = (s) => s.replace(/[\\%_]/g, "\\$&");
 
-function applyVideoOverrides(rows) {
-  let overrides;
+function readVideoOverrides() {
   try {
-    overrides = JSON.parse(fs.readFileSync(path.join(__dirname, "video-overrides.json"), "utf8"));
-  } catch {
-    return rows;
+    return JSON.parse(fs.readFileSync(path.join(__dirname, "video-overrides.json"), "utf8"));
+  } catch (error) {
+    console.error("Video overrides could not be read:", error.message);
+    return {};
   }
+}
+
+function applyVideoOverrides(rows) {
+  const overrides = readVideoOverrides();
   return rows.map((row) => {
     const override = overrides[String(row.imdb_id || "")];
     if (!override || override.enabled !== true || override.rightsConfirmed !== true) return row;
-    if (!row.video_rights_basis || !row.video_rights_evidence) return row;
-    if (typeof override.url !== "string" || !/^https:\/\//i.test(override.url)) return row;
+    if (typeof override.url !== "string" || !/^https:\/\//i.test(override.url.trim())) return row;
     if (typeof override.rightsEvidence !== "string" || override.rightsEvidence.trim().length < 8) return row;
     const next = { ...row, video_url: override.url.trim() };
     if (override.type === "movie" || override.type === "trailer") next.video_type = override.type;
@@ -381,7 +384,7 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
     run("m.views DESC, m.imdb_rating DESC"),
     run("m.imdb_rating DESC, m.views DESC"),
     run("m.release_year DESC, m.created_at DESC"),
-    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL ORDER BY views DESC, imdb_rating DESC LIMIT 2")
+    pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
   ]);
   res.json({ featured: applyVideoOverrides(featuredRows), popular: applyVideoOverrides(popular), topRated: applyVideoOverrides(topRated), newReleases: applyVideoOverrides(newReleases) });
 }));
