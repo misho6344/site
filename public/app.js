@@ -431,6 +431,7 @@ function mountPlayer({ userInitiated = false } = {}) {
     if (!directUrl) void resolveArchiveVideo(embed.identifier);
   }
 
+  document.body.classList.add("player-open");
   box.innerHTML = source.type === "video"
     ? `<video controls autoplay playsinline webkit-playsinline preload="auto" src="${esc(source.src)}"></video>`
     : `<iframe loading="eager" src="${esc(source.src)}" title="${esc(movie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
