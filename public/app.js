@@ -10,6 +10,12 @@ const state = {
   totalPages: 0,
   chat: []
 };
+const movieCache = new Map();
+function rememberMovies(movies = []) {
+  for (const movie of movies) {
+    if (movie && movie.id != null) movieCache.set(String(movie.id), movie);
+  }
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (v = "") => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -54,13 +60,30 @@ function renderAuth() {
 }
 
 /* ---------- card helpers ---------- */
+const LOCAL_VIDEO_ART = {
+  "tt12299608": { poster: "/images/p1.jpg", backdrop: "/images/b1.jpg" },
+  "tt14849194": { poster: "/images/p2.jpg", backdrop: "/images/b2.jpg" },
+  "tt0017136": { poster: "/images/p3.jpg", backdrop: "/images/b3.jpg" },
+  "tt0013442": { poster: "/images/p4.jpg", backdrop: "/images/b4.jpg" },
+  "tt1727587": { poster: "/images/p5.jpg", backdrop: "/images/b5.jpg" },
+  "tt1254207": { poster: "/images/p6.jpg", backdrop: "/images/b6.jpg" },
+  "tt0056923": { poster: "/images/p7.jpg", backdrop: "/images/b7.jpg" },
+  "tt0017925": { poster: "/images/p8.jpg", backdrop: "/images/b8.jpg" }
+};
+const LOCAL_VIDEO_ART_IDS = new Set(["tt12299608", "tt14849194"]);
+function localVideoArt(movie) {
+  const id = String(movie?.imdb_id || "");
+  const hasVideo = !!(movie && (movie.has_video_source || safeUrl(movie.video_url)));
+  return hasVideo || LOCAL_VIDEO_ART_IDS.has(id) ? LOCAL_VIDEO_ART[id] || null : null;
+}
 function imdbBadge(m) {
   return m.imdb_rating != null ? `<span class="imdb">IMDb ${Number(m.imdb_rating).toFixed(1)}</span>` : `<span class="imdb none">IMDb N/A</span>`;
 }
 function posterImg(m) {
-  const url = safeUrl(m.poster_url);
+  const art = localVideoArt(m);
+  const url = art?.poster || safeUrl(m.poster_url);
   return url
-    ? `<img src="${esc(url)}" alt="Poster of ${esc(m.title_en)}" loading="lazy" data-fallback>`
+    ? `<img src="${esc(url)}" alt="Poster of ${esc(m.title_en)}" loading="lazy" decoding="async" data-fallback>`
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
 function cardHTML(m) {
@@ -91,6 +114,8 @@ async function showHome() {
   try {
     const data = await api("/api/movies/categories");
     const all = [...(data.featured || []), ...data.topRated, ...data.newReleases, ...data.popular];
+    rememberMovies(all);
+    warmArchiveVideoSources(all, 3);
     const featuredPool = [...(data.featured || []), ...all];
     const mickey = featuredPool.find(m => /mickey\s*17/i.test(m.title_en || ""));
     const holdovers = featuredPool.find(m => /the holdovers/i.test(m.title_en || ""));
@@ -123,12 +148,12 @@ function heroHTML(movies) {
   </div>`;
 }
 function heroSlideHTML(m, active = true) {
-  // These two films use locally hosted AI-generated banner artwork.
   const title = String(m.title_en || "");
+  const localArt = localVideoArt(m);
   const aiBanner = /mickey\s*17/i.test(title)
     ? "/assets/hero-mickey17-ai.jpg"
     : (/the holdovers/i.test(title) ? "/assets/hero-holdovers-ai.jpg" : "");
-  const bg = aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
+  const bg = localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
   return `<section class="hero hero-slide${active ? " active" : ""}">
     ${bg ? `<img class="hero-bg" src="${esc(bg)}" alt="" data-hero>` : ""}
     <div class="hero-copy">
@@ -174,6 +199,8 @@ async function loadCatalog() {
   $("movieGrid").innerHTML = `<div class="state">Loading...</div>`;
   try {
     const data = await api(`/api/movies?${params}`);
+    rememberMovies(data.movies);
+    warmArchiveVideoSources(data.movies.slice(0, 8), 2);
     state.page = data.page; state.totalPages = data.totalPages;
     $("movieCount").textContent = `${data.total} movie${data.total === 1 ? "" : "s"}`;
     $("movieGrid").innerHTML = data.movies.length ? data.movies.map(cardHTML).join("") : `<div class="state">No movies match your search.</div>`;
@@ -272,7 +299,12 @@ function stopActivePlayback() {
   // Removing an iframe immediately stops its playback. Cross-origin providers do
   // not expose a safe, universal API for reading their current playback position.
   const player = $("player");
-  if (player) player.replaceChildren();
+  if (player) {
+    exitMobilePlayerFullscreen(player);
+    player.replaceChildren();
+  } else {
+    document.body.classList.remove("player-open");
+  }
 }
 
 function embedFor(url) {
@@ -289,64 +321,124 @@ function embedFor(url) {
   }
   if (host === "archive.org") {
     const m = u.pathname.match(/^\/(?:embed|details)\/([^/]+)/);
-    return m ? { type: "iframe", src: `https://archive.org/embed/${m[1]}` } : null;
+    return m ? { type: "archive", identifier: m[1], fallbackSrc: `https://archive.org/embed/${encodeURIComponent(m[1])}` } : null;
   }
   if (/\.(mp4|webm|ogg|m4v)(\?|$)/i.test(u.pathname + u.search)) return { type: "video", src: url };
   return null;
 }
 
-function requestMobilePlayerFullscreen(box, media) {
-  if (!window.matchMedia("(max-width: 700px), (pointer: coarse)").matches) return;
+const archiveVideoRequests = new Map();
 
-  // iPhone Safari exposes a native video fullscreen method. Removing playsinline
-  // below also lets iOS use its native fullscreen playback behavior.
-  if (media && typeof media.webkitEnterFullscreen === "function") {
-    try { media.webkitEnterFullscreen(); return; } catch { /* try the container API */ }
-  }
-
-  const request = box.requestFullscreen || box.webkitRequestFullscreen;
-  if (typeof request !== "function") return;
-  try {
-    const result = request.call(box);
-    if (result && typeof result.catch === "function") result.catch(() => {});
-  } catch { /* the browser may deny fullscreen; native player controls remain available */ }
+function isMobilePlayer() {
+  return window.matchMedia("(max-width: 700px), (pointer: coarse)").matches;
 }
 
-function mountPlayer() {
+function resolveArchiveVideo(identifier) {
+  if (!archiveVideoRequests.has(identifier)) {
+    const request = api(`/api/archive-video?identifier=${encodeURIComponent(identifier)}`)
+      .then(data => safeUrl(data.videoUrl))
+      .catch(() => null);
+    archiveVideoRequests.set(identifier, request);
+  }
+  return archiveVideoRequests.get(identifier);
+}
+
+function warmArchiveVideoSources(movies, maxCount = 2) {
+  const seen = new Set();
+  for (const movie of movies || []) {
+    const url = safeUrl(movie?.video_url);
+    if (!url) continue;
+    const embed = embedFor(url);
+    if (embed?.type !== "archive" || seen.has(embed.identifier)) continue;
+    seen.add(embed.identifier);
+    void resolveArchiveVideo(embed.identifier);
+    if (seen.size >= maxCount) break;
+  }
+}
+
+function exitMobilePlayerFullscreen(box = $("player")) {
+  if (box) {
+    box.classList.remove("player-mobile-fullscreen");
+    box.querySelector(".player-fullscreen-close")?.remove();
+  }
+  document.body.classList.remove("player-open");
+}
+
+function addMobilePlayerFullscreen(box) {
+  if (!isMobilePlayer()) return false;
+  box.classList.add("player-mobile-fullscreen");
+  document.body.classList.add("player-open");
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "player-fullscreen-close";
+  close.setAttribute("aria-label", "Close fullscreen video");
+  close.textContent = "×";
+  close.addEventListener("click", () => exitMobilePlayerFullscreen(box));
+  box.append(close);
+  return true;
+}
+
+async function mountPlayer() {
   const box = $("player");
-  const url = currentMovie && safeUrl(currentMovie.video_url);
+  const movie = currentMovie;
+  const url = movie && safeUrl(movie.video_url);
   const embed = url && embedFor(url);
-  if (!embed) { box.innerHTML = `<div class="player-note"><p>${url ? "This video source is not supported by the player." : "Video is not available for this title yet."}</p></div>`; return; }
-  box.innerHTML = embed.type === "video"
-    ? `<video controls autoplay src="${esc(embed.src)}"></video>`
-    : `<iframe src="${esc(embed.src)}" title="${esc(currentMovie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  if (!box || !embed) {
+    if (box) box.innerHTML = `<div class="player-note"><p>${url ? "This video source is not supported by the player." : "Video is not available for this title yet."}</p></div>`;
+    return;
+  }
+
+  const mobileFullscreen = isMobilePlayer();
+  if (mobileFullscreen) {
+    box.classList.add("player-mobile-fullscreen");
+    document.body.classList.add("player-open");
+  }
+  box.innerHTML = `<div class="player-loading"><span></span><p>Preparing video…</p></div>`;
+
+  let source = embed;
+  if (embed.type === "archive") {
+    const directUrl = await resolveArchiveVideo(embed.identifier);
+    if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
+    source = directUrl
+      ? { type: "video", src: directUrl }
+      : { type: "iframe", src: embed.fallbackSrc };
+  }
+  if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
+
+  box.innerHTML = source.type === "video"
+    ? `<video controls autoplay playsinline webkit-playsinline preload="auto" src="${esc(source.src)}"></video>`
+    : `<iframe loading="eager" src="${esc(source.src)}" title="${esc(movie.title_en)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+
   const video = box.querySelector("video");
   if (video) {
-    const resumeAt = playbackPositions.get(String(currentMovie.id));
+    const resumeAt = playbackPositions.get(String(movie.id));
     if (Number.isFinite(resumeAt) && resumeAt > 0) {
       video.addEventListener("loadedmetadata", () => {
         try { video.currentTime = resumeAt; } catch { /* seek may be unavailable */ }
       }, { once: true });
     }
     video.addEventListener("timeupdate", () => {
-      if (Number.isFinite(video.currentTime)) playbackPositions.set(String(currentMovie.id), video.currentTime);
+      if (Number.isFinite(video.currentTime)) playbackPositions.set(String(movie.id), video.currentTime);
     });
     try {
       const playback = video.play();
       if (playback && typeof playback.catch === "function") playback.catch(() => {});
     } catch { /* playback can still be started from the native controls */ }
-    requestMobilePlayerFullscreen(box, video);
-  } else {
-    requestMobilePlayerFullscreen(box, box.querySelector("iframe"));
   }
-  box.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  if (mobileFullscreen) addMobilePlayerFullscreen(box);
+  else box.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 async function showMovie(id, autoplay) {
   const view = $("movieView");
   view.innerHTML = `<div class="state">Loading...</div>`;
   try {
-    const { movie: m } = await api(`/api/movies/${id}`);
+    const cachedMovie = movieCache.get(String(id));
+    const { movie: m } = cachedMovie ? { movie: cachedMovie } : await api(`/api/movies/${id}`);
+    rememberMovies([m]);
+    const archiveEmbed = safeUrl(m.video_url) ? embedFor(m.video_url) : null;
+    if (archiveEmbed?.type === "archive") void resolveArchiveVideo(archiveEmbed.identifier);
     currentMovie = m;
     document.title = `${m.title_en} — NoAdFrame`;
     const back = safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
@@ -366,7 +458,7 @@ async function showMovie(id, autoplay) {
           <p class="desc">${esc(m.description || "No description available.")}</p>
           ${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length ? `<div class="rights-credit"><strong>Content credits</strong><p>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).map(esc).join("<br>")}</p>${m.video_license_url ? `<a href="${esc(safeUrl(m.video_license_url))}" target="_blank" rel="noopener noreferrer">Video licence</a>` : ""}</div>` : ""}
           ${safeUrl(m.video_url) ? `<button class="btn solid" id="watchBtn" type="button">${m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie"}</button>` : ""}
-          ${safeUrl(m.source_url) ? `<a class="btn ghost" id="sourceLink" href="${esc(safeUrl(m.source_url))}" target="_blank" rel="noopener noreferrer">↗ Open video source</a>` : ""}
+
         </div>
       </div>
       <div class="player" id="player">
@@ -391,7 +483,7 @@ async function showMovie(id, autoplay) {
     $("playerCover").addEventListener("click", play);
     $("commentSort").addEventListener("change", e => { commentSort = e.target.value; loadComments(); });
     $("commentForm").addEventListener("submit", postComment);
-    if (autoplay) setTimeout(mountPlayer, 150);
+    if (autoplay) void mountPlayer();
     await loadComments();
   } catch (error) {
     view.innerHTML = `<div class="state">${esc(error.message)}</div>`;
@@ -513,7 +605,14 @@ $("loginBtn").addEventListener("click", () => openAuth("login"));
 $("registerBtn").addEventListener("click", () => openAuth("register"));
 document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 $("authModal").addEventListener("click", e => { if (e.target === $("authModal") || e.target.hasAttribute("data-close")) closeAuth(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeAuth(); $("chatPanel").classList.remove("open"); $("searchForm").classList.remove("is-open"); } });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    exitMobilePlayerFullscreen();
+    closeAuth();
+    $("chatPanel").classList.remove("open");
+    $("searchForm").classList.remove("is-open");
+  }
+});
 document.addEventListener("click", e => { const b = e.target.closest("[data-open-auth]"); if (b) openAuth(b.dataset.openAuth); });
 
 async function submitAuth(event, endpoint, welcome) {
