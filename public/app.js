@@ -87,10 +87,9 @@ function posterImg(m) {
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
 function cardHTML(m) {
-  const hasVideo = !!(m.has_video_source || safeUrl(m.video_url));
-  const href = hasVideo && m.video_type === "trailer"
-    ? `#/movie/${m.id}/play`
-    : `#/movie/${m.id}`;
+  // Only mark a card as playable when the public API actually exposes a usable URL.
+  const hasVideo = !!safeUrl(m.video_url);
+  const href = `#/movie/${m.id}`;
   return `<a class="card${hasVideo ? " has-video" : ""}" href="${href}" aria-label="${esc(m.title_en)}">
     <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div></div>
     <h3>${esc(m.title_en)}</h3>
@@ -154,6 +153,9 @@ function heroSlideHTML(m, active = true) {
     ? "/assets/hero-mickey17-ai.jpg"
     : (/the holdovers/i.test(title) ? "/assets/hero-holdovers-ai.jpg" : "");
   const bg = localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
+  const playable = !!safeUrl(m.video_url);
+  const playHref = playable ? `#/movie/${m.id}/play` : `#/movie/${m.id}`;
+  const playLabel = playable ? (m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie") : "View Details";
   return `<section class="hero hero-slide${active ? " active" : ""}">
     ${bg ? `<img class="hero-bg" src="${esc(bg)}" alt="" data-hero>` : ""}
     <div class="hero-copy">
@@ -162,7 +164,7 @@ function heroSlideHTML(m, active = true) {
       ${m.title_ka ? `<div class="en">${esc(m.title_en)}</div>` : ""}
       <div class="hero-meta">${imdbBadge(m)}<span class="pill">${esc(m.release_year || "—")}</span>${String(m.genre || "").split(",").slice(0, 3).map(g => `<span class="pill">${esc(g.trim())}</span>`).filter(() => m.genre).join("")}</div>
       <p>${esc(m.description || "")}</p>
-      <div class="hero-actions"><a class="btn solid" href="#/movie/${m.id}/play">${m.video_type === "trailer" && safeUrl(m.video_url) ? "▶ Watch Trailer" : "▶ Watch Movie"}</a><a class="btn ghost" href="#/movie/${m.id}">Details</a></div>
+      <div class="hero-actions"><a class="btn solid" href="${playHref}">${playLabel}</a><a class="btn ghost" href="#/movie/${m.id}">Details</a></div>
     </div></section>`;
 }
 
