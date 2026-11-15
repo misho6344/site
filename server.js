@@ -65,6 +65,7 @@ const passwordChangeLimiter = limiter("change-password", 15 * 60 * 1000, 5, "Too
 const commentLimiter = limiter("comments", 10 * 60 * 1000, 20, "You are commenting too fast. Please slow down.");
 const assistantLimiter = limiter("assistant", 5 * 60 * 1000, 6, "The assistant request limit has been reached. Please wait a few minutes.");
 const archiveVideoLimiter = limiter("archive-video", 60 * 1000, 10, "Too many video metadata requests. Please try again shortly.");
+const archiveVideoCache = new Map();
 const catalogueLimiter = limiter("catalogue", 60 * 1000, 60, "Too many catalogue requests. Please try again shortly.");
 const copyrightReportLimiter = limiter("copyright-report", 60 * 60 * 1000, 5, "Too many copyright reports. Please try again later.");
 
@@ -126,6 +127,12 @@ app.use((_req, res, next) => {
   });
   next();
 });
+app.use("/images", express.static(path.join(__dirname, "preview", "img"), {
+  maxAge: "7d",
+  immutable: true,
+  index: false,
+  dotfiles: "deny"
+}));
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
 
 /* ---------- helpers ---------- */
@@ -184,6 +191,11 @@ function adminOnly(req, _res, next) {
 app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   const identifier = text(req.query.identifier, 180);
   if (!/^[a-zA-Z0-9._-]{1,180}$/.test(identifier)) throw httpError(400, "Invalid Archive.org identifier.");
+  const cached = archiveVideoCache.get(identifier);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+    return res.json({ videoUrl: cached.videoUrl });
+  }
   const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`);
   if (!response.ok) throw httpError(502, "Archive.org metadata could not be loaded.");
   const metadata = await response.json();
@@ -206,7 +218,10 @@ app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   });
   if (!files.length) throw httpError(404, "No browser-compatible MP4, M4V, or WebM video file is available in this Archive.org item.");
   const name = files[0].name.split("/").map(encodeURIComponent).join("/");
-  res.json({ videoUrl: `https://archive.org/download/${encodeURIComponent(identifier)}/${name}` });
+  const videoUrl = `https://archive.org/download/${encodeURIComponent(identifier)}/${name}`;
+  archiveVideoCache.set(identifier, { videoUrl, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+  res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+  res.json({ videoUrl });
 }));
 
 app.get("/api/health", healthLimiter, wrap(async (_req, res) => {
