@@ -280,9 +280,26 @@ $("genreGrid").addEventListener("click", e => {
   const tile = e.target.closest("[data-genre]");
   if (tile) applyFilters({ genre: tile.dataset.genre, q: "" });
 });
+function handleMobileMovieNavigation(event) {
+  if (!window.matchMedia("(max-width: 700px), (pointer: coarse)").matches) return;
+  const link = event.target.closest('a[href^="#/movie/"]');
+  if (!link) return;
+  const target = link.getAttribute("href");
+  if (!target || !/^#\/movie\/\d+(?:\/play)?$/.test(target)) return;
+  event.preventDefault();
+  if (location.hash === target) {
+    void route();
+  } else {
+    location.hash = target;
+  }
+}
+
 $("homeRows").addEventListener("click", e => {
   const link = e.target.closest("[data-sort]");
   if (link) { state.filters = { q: "", genre: "", year: "", minRating: "", sort: link.dataset.sort }; state.page = 1; }
+});
+["homeRows", "movieGrid", "hero"].forEach(id => {
+  $(id).addEventListener("click", handleMobileMovieNavigation);
 });
 
 /* ---------- movie page ---------- */
