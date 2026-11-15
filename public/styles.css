@@ -443,3 +443,20 @@ body.player-open .chat-panel{
   .main-nav a{padding-inline:clamp(8px,1.1vw,16px);white-space:nowrap}
   .header-actions{flex:0 0 auto;margin-left:0}
 }
+
+
+/* Mobile movie cards: keep the full card as a reliable touch target. */
+@media(max-width:700px), (pointer:coarse){
+  a.card{
+    position:relative;
+    z-index:1;
+    display:block;
+    min-height:0;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:rgba(255,140,0,.18);
+    cursor:pointer;
+  }
+  a.card > *{pointer-events:none}
+  .row-track{touch-action:pan-x pan-y}
+  .hero-actions a{touch-action:manipulation}
+}
