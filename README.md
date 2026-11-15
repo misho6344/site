@@ -166,7 +166,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
 
 ### Cloudflare-ის edge დაცვა
 
-Render-ს უკვე აქვს შემომავალი ტრაფიკის edge DDoS დაცვა, მაგრამ აპლიკაციის endpoint-ების abuse-ს ცალკე კონტროლი სჭირდება. დამატებითი ფენა:
+**საკუთარი Cloudflare ანგარიშის შექმნა აუცილებელი არ არის საბაზისო DDoS დაცვისთვის:** Render ყველა განთავსებულ საიტს ავტომატურად იცავს Cloudflare-ის DDoS ინფრასტრუქტურით. ეს ცალკე არ მოითხოვს შენგან Cloudflare ანგარიშს ან DNS ცვლილებას. საკუთარი Cloudflare ანგარიშის დამატება არჩევითია — ის გამოგადგება, თუ გინდა მართო შენი დომენის Proxy, WAF, custom rate-limit და origin header წესები. Render-ის ჩაშენებულ დაცვასა და შენს პირად Cloudflare ზონას ერთმანეთში ნუ აურევ. Endpoint abuse-სთვის აპლიკაციის/Redis rate-limit მაინც საჭიროა.
 
 1. მიაბით საკუთარი დომენი Cloudflare-ს და DNS ჩანაწერზე ჩართეთ Proxy (orange cloud); SSL/TLS რეჟიმი დააყენეთ **Full (strict)**.
 2. Cloudflare Security-ში დატოვეთ DDoS managed protection ჩართული და ჩართეთ WAF Managed Rules, როცა ხელმისაწვდომია.
@@ -178,7 +178,7 @@ Render-ს უკვე აქვს შემომავალი ტრაფ
    დაამატეთ Render Environment-ში ORIGIN_ACCESS_TOKEN. Cloudflare Rules → Transform Rules → Modify Request Header-ში დაამატეთ X-Origin-Access-Token იგივე მნიშვნელობით თქვენი საიტის hostname-ისთვის. აპი ამ header-ს ამოწმებს და მის გარეშე პირდაპირ origin-ზე მისულ მოთხოვნას უარყოფს; /api/health გამონაკლისია Render-ის health check-ისთვის. ეს ჩართეთ მხოლოდ მას შემდეგ, რაც Cloudflare header rule მზად იქნება, თორემ საიტზე ჩვეულებრივი წვდომაც დაიბლოკება.
 5. Render-ზე TRUST_PROXY_HOPS ნაგულისხმევად არის 1. შეცვალეთ მხოლოდ მაშინ, როცა თქვენი proxy chain-ის რეალური რაოდენობა გადაამოწმეთ; არასოდეს გამოიყენოთ trust proxy = true ან მომხმარებლის მიერ მოწოდებული X-Forwarded-For უპირობოდ.
 
-**მნიშვნელოვანი:** Express-ის rate limit ვერ აჩერებს ქსელურ flood-ს მანამდე, სანამ ტრაფიკი ჰოსტამდე მივა. ამიტომ Render/Cloudflare edge დაცვა, Cloudflare WAF და origin-ის გვერდის ავლის დაბლოკვა აუცილებელი გარე ფენებია. ვერცერთი კონფიგურაცია ვერ იძლევა გარანტიას, რომ ყველა ზომის DDoS შეტევა საიტს არასდროს გათიშავს.
+**მნიშვნელოვანი:** Express-ის rate limit ვერ აჩერებს ქსელურ flood-ს მანამდე, სანამ ტრაფიკი ჰოსტამდე მივა. Render-ის ავტომატური edge DDoS ფენა უკვე მოქმედებს. საკუთარი Cloudflare WAF და origin-ის header-ით დაცვა დამატებითი, არჩევითი ფენებია — გამოიყენე მხოლოდ მაშინ, თუ შენს დომენს საკუთარ Cloudflare ანგარიშში მართავ. ვერცერთი კონფიგურაცია ვერ იძლევა გარანტიას, რომ ყველა ზომის DDoS შეტევა საიტს არასდროს გათიშავს.
 ## 10. API
 
 | Method | Path | წვდომა |
