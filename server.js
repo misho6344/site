@@ -526,7 +526,7 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
   if (!["copyright", "trademark", "privacy", "other"].includes(noticeType)) throw httpError(400, "Choose a valid notice type.");
   if (!reporterName || !reporterIdentifier || !reporterAddress || !reporterPhone || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(reporterEmail)) throw httpError(400, "Complete all reporter identity and contact fields.");
   if (workDescription.length < 20 || claimBasis.length < 20 || reportedUrls.length < 8) throw httpError(400, "Provide a detailed description, legal basis and the exact URLs to review.");
-  if (supportingUrl && !/^https:\\/\\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
+  if (supportingUrl && !/^https:\/\/\//i.test(supportingUrl)) throw httpError(400, "Supporting evidence must be an HTTPS URL.");
   const [saved] = await pool.query(
     `INSERT INTO copyright_reports
       (notice_type, reporter_name, reporter_identifier, reporter_address, reporter_phone, reporter_email, work_description, claim_basis, reported_urls, supporting_url)
