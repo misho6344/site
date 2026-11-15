@@ -130,3 +130,26 @@ footer{display:flex;gap:20px;align-items:center;justify-content:space-between;fl
   .chat-form button{width:38px;height:38px;flex:0 0 38px}
   .chat-launcher{bottom:calc(12px + env(safe-area-inset-bottom))}
 }
+
+
+/* Mobile width containment: prevent min-content children from widening the page. */
+@media(max-width:700px){
+  html,body{width:100%;max-width:100%;overflow-x:clip}
+  body{min-width:0}
+  #app,.topbar,footer,.view,.page,.rows,#homeRows,#hero,#movieView{width:100%;max-width:100%;min-width:0}
+  .topbar,.header-actions,.auth-actions,.searchbox,.page-head,.detail,.info,.facts,.comments,.row-head,.hero-copy,.about{min-width:0}
+  .header-actions{max-width:100%;flex-wrap:nowrap}
+  .auth-actions{max-width:48%;flex-shrink:1}
+  .auth-actions .btn{min-width:0;max-width:100%;padding-inline:8px}
+  .searchbox{min-width:0}
+  .main-nav{max-width:100%;min-width:0}
+  .hero,.hero-carousel,.hero-carousel-slides,.hero-slide{max-width:100%;min-width:0}
+  .hero-copy,.info,.facts b,.desc,.about p,.comment p,.bubble{overflow-wrap:anywhere;word-break:normal}
+  .detail{grid-template-columns:minmax(0,1fr)}
+  .facts div{min-width:0;grid-template-columns:75px minmax(0,1fr)}
+  .grid,.genre-grid{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+  .row-track{width:100%;max-width:100%;min-width:0;overscroll-behavior-x:contain}
+  .player{width:100%;max-width:100%;min-width:0}
+  .chat-panel{left:12px;right:12px;width:auto;max-width:calc(100% - 24px)}
+  .pagination{max-width:100%;min-width:0}
+}
