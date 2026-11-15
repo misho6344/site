@@ -64,7 +64,11 @@ function posterImg(m) {
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
 function cardHTML(m) {
-  return `<a class="card" href="#/movie/${m.id}" aria-label="${esc(m.title_en)}">
+  const hasVideo = !!safeUrl(m.video_url);
+  const href = hasVideo && m.video_type === "trailer"
+    ? `#/movie/${m.id}/play`
+    : `#/movie/${m.id}`;
+  return `<a class="card${hasVideo ? " has-video" : ""}" href="${href}" aria-label="${esc(m.title_en)}">
     <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div></div>
     <h3>${esc(m.title_en)}</h3>
     <div class="ka">${esc(m.title_ka || "")}</div>
