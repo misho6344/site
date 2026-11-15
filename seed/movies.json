@@ -30,12 +30,6 @@
   {
     "imdbId": "tt33175825",
     "titleKa": "ტიტანებზე შეტევა: უკანასკნელი თავდასხმა",
-    "videoUrl": "https://archive.org/details/attack.-on.-titan.-the.-movie.-the.-last.-attack.-2024.1080p-ge-dubbed",
-    "videoType": "trailer",
-    "videoRightsBasis": "official_embed",
-    "videoRightsEvidence": "The official Attack on Titan portal identifies this exact YouTube video as the official trailer: https://aot-portal.com/en/movie_gallery/gekijouban-shingeki-no-kyojin-kanketsu-hen-the-last-attack-hon-yokoku/ . It is published by Pony Canyon's verified YouTube channel: https://www.youtube.com/watch?v=PuE1uRbpkTk",
-    "videoLicenseUrl": "",
-    "videoAttribution": "Official trailer published by Pony Canyon for Attack on Titan: The Last Attack. Embedded from the verified Pony Canyon YouTube channel; this is a trailer, not the full movie.",
     "description": "კაცობრიობის ბედის განმსაზღვრელ ბრძოლაში ერენ იეგერი იწყებს „მიწის ზანზარს“ და კოლოსალური ტიტანების ლაშქარი მსოფლიოს განადგურებით ემუქრება. მიკასა, არმინი და მათი თანამებრძოლები უკანასკნელ ძალებს იკრებენ, რათა ერენი შეაჩერონ. ფილმი აერთიანებს „Attack on Titan: The Final Season – The Final Chapters“-ის ორ ფინალურ ნაწილს, კინოვერსიისთვის განახლებული ვიზუალითა და 5.1-არხიანი ხმით.",
     "descriptionRightsBasis": "original",
     "descriptionRightsEvidence": "Original Georgian synopsis written for NoAdFrame from the official Attack on Titan Portal synopsis and film introduction: https://aot-portal.com/en/animation/movie-the-last-attack/",
@@ -47,22 +41,10 @@
   },
   {
     "imdbId": "tt12299608",
-    "titleKa": "მიკი 17",
-    "videoUrl": "https://archive.org/details/mickey-17-2025-1080p-web-dl-hevc-x-265-5.1-bone-ge-dubbed",
-    "videoType": "trailer",
-    "videoRightsBasis": "official_embed",
-    "videoRightsEvidence": "Official trailer published by the verified Warner Bros. YouTube channel: https://www.youtube.com/watch?v=osYpGSz_0i4 . Warner Bros. official pressroom also lists this as a trailer: https://press.wbd.com/us/na/media-release/hbo-max/mickey-17-begins-streaming-exclusively-max-may-23",
-    "videoLicenseUrl": "",
-    "videoAttribution": "Official Mickey 17 trailer published by Warner Bros.; embedded from the verified studio channel."
+    "titleKa": "მიკი 17"
   },
   {
     "imdbId": "tt14849194",
-    "titleKa": "ჩარჩენილები",
-    "videoUrl": "https://archive.org/details/the.-holdovers.-2023.1080p.-webrip.-1600-mb.-dd-5.1.x-264-galaxy-rg-ge-dubbed",
-    "videoType": "trailer",
-    "videoRightsBasis": "official_embed",
-    "videoRightsEvidence": "Official trailer published by the verified Focus Features YouTube channel: https://www.youtube.com/watch?v=AhKLpJmHhIg . Focus Features film page identifies it as the official trailer: https://www.focusfeatures.com/the-holdovers",
-    "videoLicenseUrl": "",
-    "videoAttribution": "Official The Holdovers trailer published by Focus Features; embedded from the verified studio channel."
+    "titleKa": "ჩარჩენილები"
   }
 ]
