@@ -471,6 +471,14 @@ function renderPlayerSource(box, movie, source, { userInitiated = false, delayed
 
   const video = box.querySelector("video");
   if (video) {
+    // Some Archive.org MP4 files are HEVC/H.265. Many mobile browsers cannot
+    // decode them, so switch to Archive.org's browser player when native playback fails.
+    if (source.fallbackSrc) {
+      video.addEventListener("error", () => {
+        if (!box.contains(video)) return;
+        renderPlayerSource(box, movie, { type: "iframe", src: source.fallbackSrc }, { delayed: true });
+      }, { once: true });
+    }
     const resumeAt = playbackPositions.get(String(movie.id));
     if (Number.isFinite(resumeAt) && resumeAt > 0) {
       video.addEventListener("loadedmetadata", () => {
@@ -510,7 +518,7 @@ function mountPlayer({ userInitiated = false } = {}) {
   if (embed.type === "archive") {
     const cachedUrl = archiveVideoUrls.get(embed.identifier);
     if (cachedUrl) {
-      renderPlayerSource(box, movie, { type: "video", src: cachedUrl }, { userInitiated });
+      renderPlayerSource(box, movie, { type: "video", src: cachedUrl, fallbackSrc: embed.fallbackSrc }, { userInitiated });
       return;
     }
 
@@ -522,7 +530,7 @@ function mountPlayer({ userInitiated = false } = {}) {
     resolveArchiveVideo(embed.identifier).then(videoUrl => {
       if (!currentMovie || String(currentMovie.id) !== String(movie.id) || $("player") !== box) return;
       if (videoUrl) {
-        renderPlayerSource(box, movie, { type: "video", src: videoUrl }, {
+        renderPlayerSource(box, movie, { type: "video", src: videoUrl, fallbackSrc: embed.fallbackSrc }, {
           userInitiated,
           delayed: true
         });
