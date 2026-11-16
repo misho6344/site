@@ -100,6 +100,7 @@ const movieViewLimiter = limiter("movie-view", 60 * 60 * 1000, 60, "Too many vid
 const archiveVideoCache = new Map();
 const catalogueLimiter = limiter("catalogue", 60 * 1000, 60, "Too many catalogue requests. Please try again shortly.");
 const copyrightReportLimiter = limiter("copyright-report", 60 * 60 * 1000, 5, "Too many copyright reports. Please try again later.");
+const clientErrorReportLimiter = limiter("client-errors", 60 * 1000, 10, "Too many browser error reports. Please try again shortly.");
 
 app.use(globalLimiter);
 app.use("/api", apiLimiter);
@@ -178,6 +179,15 @@ const requireNumericId = (req) => {
   if (!/^[1-9]\d*$/.test(id)) throw httpError(400, "Invalid ID.");
   return id;
 };
+
+app.post("/api/client-errors", clientErrorReportLimiter, wrap(async (req, res) => {
+  const kind = text(req.body?.kind || "runtime", 40).replace(/[^a-z0-9_-]/gi, "");
+  const message = text(req.body?.message || "Browser error", 1500).replace(/[\\r\\n\\t]+/g, " ");
+  const page = text(req.body?.page || "", 300).replace(/[\\r\\n]+/g, "");
+  const stack = text(req.body?.stack || "", 3000).replace(/(bearer\\s+)[a-z0-9._~-]+/gi, "$1[REDACTED]");
+  console.error("[BROWSER]", kind || "runtime", message, "page:", page, "stack:", stack);
+  res.status(202).json({ ok: true });
+}));
 
 const RETIRED_VIDEO_IMDB_IDS = new Set();
 
