@@ -69,7 +69,7 @@ function reportBrowserError(kind, error) {
     method: "POST",
     credentials: "same-origin",
     headers,
-    body: JSON.stringify({ kind, message, stack, page: location.href })
+    body: JSON.stringify({ kind, message, stack, page: location.pathname })
   }).catch(() => {});
 }
 window.addEventListener("error", event => {
