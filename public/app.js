@@ -49,6 +49,25 @@ async function api(url, options = {}) {
   return data;
 }
 
+function reportBrowserError(kind, error) {
+  const message = String(error?.message || error || "Unknown browser error").slice(0, 1500);
+  const stack = String(error?.stack || "").slice(0, 3000);
+  const csrfCookie = document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("noadframe_csrf="));
+  const headers = { "Content-Type": "application/json" };
+  if (csrfCookie) headers["X-CSRF-Token"] = decodeURIComponent(csrfCookie.slice("noadframe_csrf=".length));
+  fetch("/api/client-errors", {
+    method: "POST",
+    credentials: "same-origin",
+    headers,
+    body: JSON.stringify({ kind, message, stack, page: location.href })
+  }).catch(() => {});
+}
+window.addEventListener("error", event => {
+  if (event.error || event.message) reportBrowserError("runtime", event.error || event.message);
+});
+window.addEventListener("unhandledrejection", event => reportBrowserError("unhandled-rejection", event.reason));
+
+
 const countedMovieViews = new Set();
 function recordMovieView(movie) {
   const id = String(movie?.id || "");
