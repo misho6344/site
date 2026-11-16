@@ -542,6 +542,7 @@ function renderPlayerSource(box, movie, source, { userInitiated = false, delayed
 
   const video = box.querySelector("video");
   if (video) {
+    video.addEventListener("play", () => recordMovieView(movie), { once: true });
     if (source.archiveId) video.dataset.archiveId = source.archiveId;
     // Do not replace an unsupported video with an Archive iframe that can
     // remain on an endless spinner. Show the actual playback failure instead.
@@ -572,8 +573,13 @@ function renderPlayerSource(box, movie, source, { userInitiated = false, delayed
       // a fresh, explicit play action so mobile Safari/Chrome allows playback.
       showPlayerStartControl(box, video);
     }
-  } else if (userInitiated && isMobilePlayer()) {
-    requestMobilePlayerFullscreen(box, box.querySelector("iframe"));
+  } else {
+    // Cross-origin embeds do not expose their playback state to this site.
+    // Count an explicit user request to open the external player.
+    if (userInitiated) recordMovieView(movie);
+    if (userInitiated && isMobilePlayer()) {
+      requestMobilePlayerFullscreen(box, box.querySelector("iframe"));
+    }
   }
 
   if (!isMobilePlayer()) box.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -590,7 +596,6 @@ function mountPlayer({ userInitiated = false } = {}) {
   }
 
   document.body.classList.add("player-open");
-  recordMovieView(movie);
   if (isMobilePlayer()) addMobilePlayerFullscreen(box);
 
   if (embed.type === "archive") {
