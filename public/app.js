@@ -39,13 +39,23 @@ async function api(url, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   const csrf = document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith("noadframe_csrf="));
   if (csrf && !["GET", "HEAD", "OPTIONS"].includes(String(options.method || "GET").toUpperCase())) headers["X-CSRF-Token"] = decodeURIComponent(csrf.slice("noadframe_csrf=".length));
-  const response = await fetch(url, { ...options, headers, credentials: "same-origin" });
+  let response;
+  try {
+    response = await fetch(url, { ...options, headers, credentials: "same-origin" });
+  } catch (error) {
+    reportBrowserError("network", error);
+    throw error;
+  }
   const data = await response.json().catch(() => ({}));
   if (response.status === 401 && !url.includes("/auth/login") && !url.includes("/auth/register")) {
     setSession(null);
     if (document.querySelector('[data-view="movie"]:not([hidden])') || document.querySelector('[data-view="profile"]:not([hidden])')) route();
   }
-  if (!response.ok) throw new Error(data.error || "Something went wrong.");
+  if (!response.ok) {
+    const error = new Error(data.error || "Something went wrong.");
+    reportBrowserError("api-" + response.status, error);
+    throw error;
+  }
   return data;
 }
 
@@ -66,6 +76,16 @@ window.addEventListener("error", event => {
   if (event.error || event.message) reportBrowserError("runtime", event.error || event.message);
 });
 window.addEventListener("unhandledrejection", event => reportBrowserError("unhandled-rejection", event.reason));
+for (const [method,kind] of [["error","console-error"],["warn","console-warning"]]) {
+  const original=console[method].bind(console);
+  console[method]=(...args)=>{
+    original(...args);
+    try {
+      const message=args.map(value=>value instanceof Error?value.message:typeof value==="string"?value:String(value)).join(" ").slice(0,1500);
+      reportBrowserError(kind,new Error(message));
+    } catch { /* diagnostics must never interrupt the site */ }
+  };
+}
 
 
 const countedMovieViews = new Set();
