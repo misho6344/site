@@ -182,9 +182,9 @@ const requireNumericId = (req) => {
 
 app.post("/api/client-errors", clientErrorReportLimiter, wrap(async (req, res) => {
   const kind = text(req.body?.kind || "runtime", 40).replace(/[^a-z0-9_-]/gi, "");
-  const message = text(req.body?.message || "Browser error", 1500).replace(/[\\r\\n\\t]+/g, " ");
-  const page = text(req.body?.page || "", 300).replace(/[\\r\\n]+/g, "");
-  const stack = text(req.body?.stack || "", 3000).replace(/(bearer\\s+)[a-z0-9._~-]+/gi, "$1[REDACTED]");
+  const message = text(req.body?.message || "Browser error", 1500).replace(/[\r\n\t]+/g, " ");
+  const page = text(req.body?.page || "", 300).replace(/[\r\n]+/g, "");
+  const stack = text(req.body?.stack || "", 3000).replace(/(bearer\s+)[a-z0-9._~-]+/gi, "$1[REDACTED]");
   console.error("[BROWSER]", kind || "runtime", message, "page:", page, "stack:", stack);
   res.status(202).json({ ok: true });
 }));
