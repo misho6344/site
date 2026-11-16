@@ -17,8 +17,6 @@ const { upsertMovie, httpError } = require("./lib/movies");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-const fs = require("fs");
 const SEO_BASE = (process.env.PUBLIC_SITE_URL || "https://noadframe.onrender.com").replace(/\/+$/, "");
 const seoEsc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const seoSlug = v => String(v || "movie").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "movie";
