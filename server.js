@@ -96,6 +96,7 @@ const passwordChangeLimiter = limiter("change-password", 15 * 60 * 1000, 5, "Too
 const commentLimiter = limiter("comments", 10 * 60 * 1000, 20, "You are commenting too fast. Please slow down.");
 const assistantLimiter = limiter("assistant", 5 * 60 * 1000, 6, "The assistant request limit has been reached. Please wait a few minutes.");
 const archiveVideoLimiter = limiter("archive-video", 60 * 1000, 10, "Too many video metadata requests. Please try again shortly.");
+const movieViewLimiter = limiter("movie-view", 60 * 60 * 1000, 60, "Too many video view requests. Please try again later.");
 const archiveVideoCache = new Map();
 const catalogueLimiter = limiter("catalogue", 60 * 1000, 60, "Too many catalogue requests. Please try again shortly.");
 const copyrightReportLimiter = limiter("copyright-report", 60 * 60 * 1000, 5, "Too many copyright reports. Please try again later.");
@@ -506,8 +507,22 @@ app.get("/api/movies/:id", wrap(async (req, res) => {
   const id = requireNumericId(req);
   const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [id]);
   if (!rows.length) throw httpError(404, "Movie not found.");
-  pool.query("UPDATE movies SET views = views + 1 WHERE id = ?", [id]).catch(() => {});
   res.json({ movie: suppressRetiredVideos(rows)[0] });
+}));
+
+app.post("/api/movies/:id/view", movieViewLimiter, wrap(async (req, res) => {
+  const id = requireNumericId(req);
+  const [result] = await pool.query(
+    "UPDATE movies SET views = views + 1 WHERE id = ? AND video_url IS NOT NULL AND video_url <> '' AND video_rights_basis IS NOT NULL",
+    [id]
+  );
+  if (!result.affectedRows) {
+    const [rows] = await pool.query("SELECT id FROM movies WHERE id = ?", [id]);
+    if (!rows.length) throw httpError(404, "Movie not found.");
+    throw httpError(409, "A playable video is not available for this movie.");
+  }
+  const [[row]] = await pool.query("SELECT views FROM movies WHERE id = ?", [id]);
+  res.json({ views: Number(row.views) || 0 });
 }));
 
 /* ---------- comments ---------- */
