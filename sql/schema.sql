@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS movies (
   video_type VARCHAR(20) NOT NULL DEFAULT 'movie',
   description TEXT NULL,
   views INT UNSIGNED NOT NULL DEFAULT 0,
+  video_views INT UNSIGNED NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_movies_rating (imdb_rating),
   INDEX idx_movies_year (release_year)
