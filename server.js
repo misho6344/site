@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
@@ -16,6 +17,32 @@ const { upsertMovie, httpError } = require("./lib/movies");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const fs = require("fs");
+const SEO_BASE = (process.env.PUBLIC_SITE_URL || "https://noadframe.onrender.com").replace(/\/+$/, "");
+const seoEsc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const seoSlug = v => String(v || "movie").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "movie";
+const seoUrl = p => SEO_BASE + (p.startsWith("/") ? p : "/" + p);
+function seoShell({title,description,path,image,graph,body="",noindex=false}) {
+ let html=fs.readFileSync(require("path").join(__dirname,"public","index.html"),"utf8");
+ const canonical=seoUrl(path), safeTitle=seoEsc(title), safeDesc=seoEsc(description), safeImage=seoEsc(image||seoUrl("/assets/logo.png"));
+ const put=(re,tag)=>{html=re.test(html)?html.replace(re,tag):html.replace("</head>",tag+"\n</head>");};
+ html=html.replace(/<title>.*?<\/title>/i,"<title>"+safeTitle+"</title>");
+ html=html.replace(/<meta name="description"[^>]*>/i,'<meta name="description" content="'+safeDesc+'">');
+ put(/<link rel="canonical"[^>]*>/i,'<link rel="canonical" href="'+seoEsc(canonical)+'">');
+ put(/<meta name="robots"[^>]*>/i,'<meta name="robots" content="'+(noindex?"noindex, nofollow":"index, follow")+'">');
+ for(const [re,tag] of [
+  [/<meta property="og:title"[^>]*>/i,'<meta property="og:title" content="'+safeTitle+'">'],
+  [/<meta property="og:description"[^>]*>/i,'<meta property="og:description" content="'+safeDesc+'">'],
+  [/<meta property="og:url"[^>]*>/i,'<meta property="og:url" content="'+seoEsc(canonical)+'">'],
+  [/<meta property="og:image"[^>]*>/i,'<meta property="og:image" content="'+safeImage+'">'],
+  [/<meta name="twitter:card"[^>]*>/i,'<meta name="twitter:card" content="summary_large_image">']
+ ]) put(re,tag);
+ if(graph) html=html.replace("</head>",'<script id="pageStructuredData" type="application/ld+json">'+JSON.stringify(graph).replace(/</g,"\\u003c")+'</script>\n</head>');
+ if(body) html=html.replace('<main id="app">','<main id="app">'+body);
+ return html;
+}
+
 let pool;
 const production = process.env.NODE_ENV === "production";
 const trustProxyHops = process.env.TRUST_PROXY_HOPS === undefined
@@ -659,6 +686,39 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
   }
   res.status(201).json({ message: "Notice submitted successfully. Thank you." });
 }));
+
+
+app.get("/robots.txt",(_req,res)=>res.type("text/plain").send("User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: "+seoUrl("/sitemap.xml")+"\n"));
+app.get("/sitemap.xml",wrap(async(_req,res)=>{
+ const [rows]=await pool.query("SELECT id,title_en,created_at FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en)<>'' ORDER BY id");
+ const paths=["/","/movies","/genres","/about",...rows.map(m=>"/movies/"+m.id+"/"+seoSlug(m.title_en))];
+ const xml='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+paths.map(p=>"<url><loc>"+seoEsc(seoUrl(p))+"</loc></url>").join("")+"</urlset>";
+ res.set("Cache-Control","public, max-age=300");res.type("application/xml").send(xml);
+}));
+app.get("/movies/:id/:slug?",wrap(async(req,res)=>{
+ if(!/^[1-9][0-9]*$/.test(req.params.id))return res.status(404).type("html").send(seoShell({title:"Movie not found — NoAdFrame",description:"Movie not found.",path:"/",noindex:true}));
+ const [rows]=await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id=?",[req.params.id]);
+ if(!rows.length)return res.status(404).type("html").send(seoShell({title:"Movie not found — NoAdFrame",description:"Movie not found.",path:"/",noindex:true}));
+ const m=suppressRetiredVideos(rows)[0], slug=seoSlug(m.title_en), route="/movies/"+m.id+"/"+slug;
+ if(req.path!==route)return res.redirect(301,route);
+ const name=m.title_ka?m.title_ka+" ("+m.title_en+")":m.title_en;
+ const desc=String(m.description||name+" — movie details, cast and IMDb information on NoAdFrame.").replace(/\s+/g," ").slice(0,300);
+ const graph={"@context":"https://schema.org","@type":"Movie","name":m.title_en,"description":desc,"url":seoUrl(route)};
+ if(m.title_ka)graph.alternateName=m.title_ka;if(m.release_year)graph.datePublished=String(m.release_year);
+ if(m.genre)graph.genre=m.genre.split(",").map(x=>x.trim());if(m.director)graph.director={"@type":"Person","name":m.director};
+ if(m.actors)graph.actor=m.actors.split(",").map(x=>({"@type":"Person","name":x.trim()}));
+ if(m.poster_url&&isHttpUrl(m.poster_url))graph.image=m.poster_url;
+ if(/^tt[0-9]{6,10}$/.test(m.imdb_id||""))graph.sameAs="https://www.imdb.com/title/"+m.imdb_id+"/";
+ const crumb={"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":seoUrl("/")},{"@type":"ListItem","position":2,"name":"Movies","item":seoUrl("/movies")},{"@type":"ListItem","position":3,"name":m.title_en,"item":seoUrl(route)}]};
+ const poster=m.poster_url&&isHttpUrl(m.poster_url)?'<img src="'+seoEsc(m.poster_url)+'" alt="'+seoEsc(name)+' poster" width="240" height="360">':"";
+ const body='<section id="seoMovieContent"><h1>'+seoEsc(name)+'</h1>'+poster+'<p>'+seoEsc(desc)+'</p><p>'+(m.release_year||"")+' · IMDb '+seoEsc(m.imdb_rating||"N/A")+' · '+seoEsc(m.genre||"")+'</p><a href="#/movie/'+m.id+'">Open movie</a></section>';
+ res.set("Cache-Control","public, max-age=300");res.type("html").send(seoShell({title:name+" — NoAdFrame",description:desc,path:route,image:m.poster_url,graph:{"@context":"https://schema.org","@graph":[graph,crumb]},body}));
+}));
+for(const [route,title,description,h1] of [
+ ["/movies","Browse Movies — NoAdFrame","Browse movies by title, genre, year and IMDb rating.","Browse Movies"],
+ ["/genres","Movie Genres — NoAdFrame","Explore movie genres on NoAdFrame.","Movie Genres"],
+ ["/about","About NoAdFrame","Learn about NoAdFrame and discover movies.","About NoAdFrame"]
+])app.get(route,(_req,res)=>res.type("html").send(seoShell({title,description,path:route,body:"<section id='seoRouteFallback'><h1>"+h1+"</h1></section>"})));
 
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
