@@ -167,6 +167,18 @@ app.use("/images", express.static(path.join(__dirname, "preview", "img"), {
   dotfiles: "deny"
 }));
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    if (res.statusCode < 400) return;
+    const requestPath = String(req.originalUrl || req.path || "/").split("?")[0].slice(0, 300);
+    const line = req.method + " " + requestPath + " HTTP " + res.statusCode + " " + (Date.now() - startedAt) + "ms";
+    if (res.statusCode >= 500) console.error("[HTTP ERROR]", line);
+    else console.warn("[HTTP WARNING]", line);
+  });
+  next();
+});
+
 
 /* ---------- helpers ---------- */
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
