@@ -513,7 +513,7 @@ app.get("/api/movies/:id", wrap(async (req, res) => {
 app.post("/api/movies/:id/view", movieViewLimiter, wrap(async (req, res) => {
   const id = requireNumericId(req);
   const [result] = await pool.query(
-    "UPDATE movies SET views = views + 1 WHERE id = ? AND video_url IS NOT NULL AND video_url <> '' AND video_rights_basis IS NOT NULL",
+    "UPDATE movies SET video_views = video_views + 1 WHERE id = ? AND video_url IS NOT NULL AND video_url <> '' AND video_rights_basis IS NOT NULL",
     [id]
   );
   if (!result.affectedRows) {
@@ -521,8 +521,8 @@ app.post("/api/movies/:id/view", movieViewLimiter, wrap(async (req, res) => {
     if (!rows.length) throw httpError(404, "Movie not found.");
     throw httpError(409, "A playable video is not available for this movie.");
   }
-  const [[row]] = await pool.query("SELECT views FROM movies WHERE id = ?", [id]);
-  res.json({ views: Number(row.views) || 0 });
+  const [[row]] = await pool.query("SELECT video_views FROM movies WHERE id = ?", [id]);
+  res.json({ views: Number(row.video_views) || 0 });
 }));
 
 /* ---------- comments ---------- */
