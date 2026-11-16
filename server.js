@@ -110,7 +110,7 @@ if (originAccessToken && originAccessToken.length < 32) {
   throw new Error("ORIGIN_ACCESS_TOKEN must contain at least 32 characters.");
 }
 app.use((req, res, next) => {
-  if (!production || !originAccessToken || req.path === "/api/health") return next();
+  if (!production || !originAccessToken || req.path === "/api/health" || req.path === "/api/client-errors") return next();
   const received = Buffer.from(req.get("x-origin-access-token") || "");
   const expected = Buffer.from(originAccessToken);
   if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
