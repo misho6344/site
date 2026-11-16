@@ -324,25 +324,30 @@ app.post("/api/auth/logout", (_req, res) => {
 });
 
 app.post("/api/auth/admin-password-recovery", forgotPasswordLimiter, wrap(async (req, res) => {
+  const configuredUsername = String(process.env.PASSWORD_RECOVERY_USERNAME || "").trim().toLowerCase();
   const configuredEmail = String(process.env.PASSWORD_RECOVERY_EMAIL || "").trim().toLowerCase();
   const configuredSecret = String(process.env.PASSWORD_RECOVERY_SECRET || "");
   const suppliedSecret = String(req.get("x-recovery-secret") || "");
+  const username = text(req.body?.username, 30).toLowerCase();
   const email = text(req.body?.email, 254).toLowerCase();
   const nextPassword = req.body?.newPassword;
 
-  if (!configuredEmail || configuredSecret.length < 32) {
+  if ((!configuredUsername && !configuredEmail) || configuredSecret.length < 32) {
     throw httpError(503, "Password recovery is not configured.");
   }
   const expected = Buffer.from(configuredSecret);
   const supplied = Buffer.from(suppliedSecret);
-  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied) || email !== configuredEmail) {
+  const identityMatches = configuredUsername ? username === configuredUsername : email === configuredEmail;
+  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied) || !identityMatches) {
     throw httpError(403, "Password recovery authorization failed.");
   }
-  if (!EMAIL_RE.test(email) || !validPassword(nextPassword)) {
-    throw httpError(400, "Use a valid email and a password of at least 10 characters containing letters and numbers.");
+  if ((configuredUsername ? !USERNAME_RE.test(username) : !EMAIL_RE.test(email)) || !validPassword(nextPassword)) {
+    throw httpError(400, "Use the configured account username or email and a password of at least 10 characters containing letters and numbers.");
   }
 
-  const [rows] = await pool.query("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
+  const [rows] = configuredUsername
+    ? await pool.query("SELECT id FROM users WHERE LOWER(username) = ? LIMIT 1", [username])
+    : await pool.query("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
   if (!rows.length) throw httpError(404, "The configured recovery account was not found.");
 
   const passwordHash = await bcrypt.hash(nextPassword, 12);
