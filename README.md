@@ -16,7 +16,7 @@
 ## მოთხოვნები
 
 - Node.js 20 ან უფრო ახალი
-- TiDB Cloud (ან MySQL) ბაზა
+- Enzonic Databases — MySQL 8.4 LTS (ან სხვა MySQL 8.x თავსებადი სერვისი)
 - OMDb API გასაღები: https://www.omdbapi.com/apikey.aspx
 - OpenAI API გასაღები: https://platform.openai.com/api-keys
 
@@ -35,20 +35,25 @@ cd noadframe
 npm install
 ```
 
-## 2. TiDB Cloud-თან დაკავშირება
+## 2. Enzonic MySQL-თან დაკავშირება
 
-1. https://tidbcloud.com → შექმენით **Starter** (უფასო) cluster.
-2. ბაზის შესაქმნელად გახსენით **SQL Editor** და გაუშვით: `CREATE DATABASE noadframe;` (ან გამოიყენეთ არსებული ბაზა).
-3. Cluster-ზე დააჭირეთ **Connect** → Connect with: **General / Node.js** → შექმენით პაროლი. მიიღებთ host-ს, port-ს (4000), user-სა და პაროლს.
-4. ააწყვეთ connection string `.env`-ისთვის:
+NoAdFrame-ის production ბაზა განთავსებულია **Enzonic Databases-ზე**, MySQL 8.4 LTS ძრავზე. Node.js backend უკავშირდება მას `mysql2` ბიბლიოთეკით.
 
-   ```
-   DATABASE_URL=mysql://USER:PASSWORD@HOST:4000/noadframe
-   ```
+1. გახსენით [Enzonic Databases](https://databases.enzonic.com/) და აირჩიეთ თქვენი MySQL database.
+2. Enzonic Console-ში გახსენით ბაზის **Connect** გვერდი და დააკოპირეთ მის მიერ მოწოდებული `DATABASE_URL`. არ გამოაქვეყნოთ ეს მისამართი, რადგან ის პაროლსაც შეიცავს.
+3. Enzonic MySQL-ის საჯარო endpoint იყენებს TLS-ს და ჩვეულებრივ პორტს `3306`. გამოიყენეთ Console-ში ნაჩვენები სრული connection string — ხელით ნუ შეცვლით host-ს, database name-ს ან username-ს.
+4. თუ პაროლში სპეციალური სიმბოლოებია (`@`, `#`, `/`, `:`), ისინი URL-encode უნდა იყოს. Enzonic-ის მიერ გენერირებული connection string უკვე სწორად არის ფორმირებული.
+5. ლოკალურად დაამატეთ `DATABASE_URL` თქვენს `.env` ფაილში. Render-ზე იგივე ცვლადი შეინახეთ მხოლოდ NoAdFrame Web Service-ის **Environment** განყოფილებაში.
+6. TLS ჩართულია ნაგულისხმევად (`DB_SSL=true`); Enzonic MySQL-ისთვის TLS არ გამორთოთ.
+7. ცხრილებს სერვერი თავად ქმნის სტარტზე (`sql/schema.sql`) და ძველი სქემის მიგრაციას ასრულებს (`lib/migrate.js`).
 
-   თუ პაროლში სპეციალური სიმბოლოებია (`@`, `#`, `/`, `:`), URL-encode გააკეთეთ (მაგ. `@` → `%40`).
-5. TLS ავტომატურად ჩართულია. ლოკალური MySQL-ისთვის TLS-ის გარეშე დაწერეთ `DB_SSL=false`.
-6. ცხრილებს სერვერი თავად ქმნის სტარტზე (`sql/schema.sql`). სურვილის შემთხვევაში იგივე ფაილი SQL Editor-შიც შეგიძლიათ გაუშვათ ხელით.
+### Enzonic Free database-ის ძილის რეჟიმი
+
+Enzonic-ის Free გეგმის მონაცემთა ბაზა დაახლოებით 5 წუთის უმოქმედობის შემდეგ აჩერებს compute-ს, მაგრამ მონაცემებს ინარჩუნებს. შემდეგი კავშირი ბაზას აღვიძებს. ამიტომ პირველ მოთხოვნას ხანგრძლივი დაყოვნება შეიძლება ჰქონდეს. Backend-ში დაყენებულია 30-წამიანი connection timeout, MySQL Keep-Alive, უსაფრთხო ხელახალი ცდა მხოლოდ წაკითხვის მოთხოვნებზე და მთავარი კატეგორიების მოკლე cache.
+
+Enzonic-ის მიმდინარე დოკუმენტაციის მიხედვით, მისი Databases სერვერები ამჟამად აშშ-შია განთავსებული; Render-ის აპლიკაცია კი Frankfurt რეგიონში მუშაობს. რეგიონებს შორის მანძილმა შეიძლება latency გაზარდოს. თუ production საიტზე ხშირი cold-start ან timeout დარჩება, განიხილეთ Enzonic-ის always-on ფასიანი გეგმა ან აპლიკაციასა და ბაზას ერთ რეგიონთან უფრო ახლოს განთავსება.
+
+**ქსელური წვდომა:** Enzonic-ის მიერ მოწოდებული საჯარო hostname და TLS გამოიყენეთ უცვლელად. TiDB Cloud-ის IP Access List ინსტრუქციები ამ პროექტის Enzonic ბაზას არ ეხება.
 
 ## 3. API გასაღებების შევსება
 
@@ -60,7 +65,7 @@ cp .env.example .env      # Windows: copy .env.example .env
 
 | ცვლადი | რა არის |
 |---|---|
-| `DATABASE_URL` | TiDB Cloud connection string |
+| `DATABASE_URL` | Enzonic MySQL connection string (TLS, port 3306) |
 | `JWT_SECRET` | გრძელი შემთხვევითი სტრიქონი (32+ სიმბოლო). შექმნა: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `OMDB_API_KEY` | OMDb გასაღები — რეალური IMDb რეიტინგისთვის |
 | `OPENAI_API_KEY` | OpenAI გასაღები — AI ასისტენტისთვის |
@@ -135,7 +140,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/admin/movies \
 2. https://render.com → **New → Web Service** → აირჩიეთ რეპოზიტორია.
 3. Runtime: Node. Build command: `npm ci`. Start command: `npm start`.
 4. **Environment** განყოფილებაში დაამატეთ `.env`-ის ცვლადები, მათ შორის `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `OMDB_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM` და `APP_BASE_URL`.
-5. TiDB Cloud-ში, თუ IP allowlist გაქვთ ჩართული, დაუშვით Render-ის გამავალი IP-ები (ან გახსენით წვდომა სატესტოდ).
+5. Enzonic Console-დან გამოიყენეთ MySQL-ის საჯარო `DATABASE_URL`; საიდუმლო მნიშვნელობა შეინახეთ Render Environment-ში და არ ატვირთოთ GitHub-ზე.
 6. Deploy-ის შემდეგ გაუშვით seed ერთხელ ლოკალურად (იმავე `DATABASE_URL`-ით) ან გამოიყენეთ Admin API.
 7. საკუთარი დომენი: Render → Settings → Custom Domains. თუ Frontend სხვა დომენზე გაქვთ, დაამატეთ `CORS_ORIGIN=https://your-domain.com`.
 
