@@ -21,6 +21,20 @@ const $ = (id) => document.getElementById(id);
 const esc = (v = "") => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "");
 
+function movieSlug(title){return String(title||"movie").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"movie";}
+function moviePath(movie){return "/movies/"+encodeURIComponent(String(movie.id))+"/"+movieSlug(movie.title_en||movie.title_ka);}
+function setMeta(selector,attribute,value){let el=document.head.querySelector(selector);if(!el){el=document.createElement("meta");const m=selector.match(/(?:name|property)=["']([^"']+)["']/);if(m)el.setAttribute(m[0].split("=")[0],m[1]);document.head.appendChild(el);}el.setAttribute(attribute,value);}
+function updatePageSeo({title,description,path="/",image="/assets/logo.png",noindex=false,structuredData=null}){
+ document.title=title;setMeta('meta[name="description"]',"content",description);
+ setMeta('meta[property="og:title"]',"content",title);setMeta('meta[property="og:description"]',"content",description);
+ setMeta('meta[property="og:url"]',"content",new URL(path,location.origin).href);setMeta('meta[property="og:image"]',"content",new URL(image,location.origin).href);
+ setMeta('meta[name="robots"]',"content",noindex?"noindex, nofollow":"index, follow");
+ let c=document.querySelector('link[rel="canonical"]');if(!c){c=document.createElement("link");c.rel="canonical";document.head.appendChild(c);}c.href=new URL(path,location.origin).href;
+ let sc=document.getElementById("pageStructuredData");if(structuredData){if(!sc){sc=document.createElement("script");sc.id="pageStructuredData";sc.type="application/ld+json";document.head.appendChild(sc);}sc.textContent=JSON.stringify(structuredData);}else if(sc)sc.remove();
+}
+function movieStructuredData(m,path){const url=new URL(path,location.origin).href;const movie={"@type":"Movie",name:m.title_en,description:m.description||m.title_en+" — movie details on NoAdFrame.",url};if(m.title_ka)movie.alternateName=m.title_ka;if(m.release_year)movie.datePublished=String(m.release_year);if(m.genre)movie.genre=m.genre.split(",").map(x=>x.trim());if(m.director)movie.director={"@type":"Person",name:m.director};if(m.actors)movie.actor=m.actors.split(",").map(x=>({"@type":"Person","name":x.trim()}));if(safeUrl(m.poster_url))movie.image=m.poster_url;if(/^tt[0-9]{6,10}$/.test(m.imdb_id||""))movie.sameAs="https://www.imdb.com/title/"+m.imdb_id+"/";return {"@context":"https://schema.org","@graph":[movie,{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":location.origin+"/"},{"@type":"ListItem","position":2,"name":"Movies","item":location.origin+"/movies"},{"@type":"ListItem","position":3,"name":m.title_en,"item":url}]}]};}
+
+
 async function api(url, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   const csrf = document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith("noadframe_csrf="));
@@ -89,7 +103,7 @@ function posterImg(m) {
 function cardHTML(m) {
   // Only mark a card as playable when the public API actually exposes a usable URL.
   const hasVideo = !!safeUrl(m.video_url);
-  const href = `#/movie/${m.id}`;
+  const href = moviePath(m);
   return `<a class="card${hasVideo ? " has-video" : ""}" href="${href}" aria-label="${esc(m.title_en)}">
     <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div></div>
     <h3>${esc(m.title_en)}</h3>
@@ -154,7 +168,7 @@ function heroSlideHTML(m, active = true) {
     : (/the holdovers/i.test(title) ? "/assets/hero-holdovers-ai.jpg" : "");
   const bg = localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
   const playable = !!safeUrl(m.video_url);
-  const playHref = playable ? `#/movie/${m.id}/play` : `#/movie/${m.id}`;
+  const playHref = playable ? `${moviePath(m)}?play=1` : moviePath(m);
   const playLabel = playable ? (m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie") : "View Details";
   return `<section class="hero hero-slide${active ? " active" : ""}">
     ${bg ? `<img class="hero-bg" src="${esc(bg)}" alt="" data-hero>` : ""}
@@ -164,7 +178,7 @@ function heroSlideHTML(m, active = true) {
       ${m.title_ka ? `<div class="en">${esc(m.title_en)}</div>` : ""}
       <div class="hero-meta">${imdbBadge(m)}<span class="pill">${esc(m.release_year || "—")}</span>${String(m.genre || "").split(",").slice(0, 3).map(g => `<span class="pill">${esc(g.trim())}</span>`).filter(() => m.genre).join("")}</div>
       <p>${esc(m.description || "")}</p>
-      <div class="hero-actions"><a class="btn solid" href="${playHref}">${playLabel}</a><a class="btn ghost" href="#/movie/${m.id}">Details</a></div>
+      <div class="hero-actions"><a class="btn solid" href="${playHref}">${playLabel}</a><a class="btn ghost" href="${moviePath(m)}">Details</a></div>
     </div></section>`;
 }
 
@@ -602,7 +616,10 @@ async function showMovie(id, autoplay) {
     const archiveEmbed = safeUrl(m.video_url) ? embedFor(m.video_url) : null;
     if (archiveEmbed?.type === "archive") void resolveArchiveVideo(archiveEmbed.identifier);
     currentMovie = m;
-    document.title = `${m.title_en} — NoAdFrame`;
+    const canonicalPath=moviePath(m);
+    const playRequested=new URLSearchParams(location.search).get("play")==="1"||autoplay;
+    if(location.pathname!==canonicalPath||location.hash)history.replaceState(null,"",canonicalPath+(playRequested?"?play=1":""));
+    updatePageSeo({title:(m.title_ka?m.title_ka+" ("+m.title_en+")":m.title_en)+" — NoAdFrame",description:String(m.description||m.title_en+" — discover movie details, cast, genre and IMDb information on NoAdFrame.").replace(/\s+/g," ").slice(0,300),path:canonicalPath,image:safeUrl(m.poster_url)||"/assets/logo.png",structuredData:movieStructuredData(m,canonicalPath)});
     const back = safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
     const cover = safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
     view.innerHTML = `
@@ -636,6 +653,7 @@ async function showMovie(id, autoplay) {
         </form>
         <div id="commentsList"></div>
       </section>`;
+    const seoFallback=$("seoMovieContent");if(seoFallback)seoFallback.remove();const routeFallback=$("seoRouteFallback");if(routeFallback)routeFallback.remove();
     $("commentSort").value = commentSort;
     const play = () => mountPlayer({ userInitiated: true });
     $("posterPlay").addEventListener("click", play);
@@ -696,7 +714,7 @@ async function showProfile() {
         <label>New password<input type="password" name="newPassword" autocomplete="new-password" minlength="8" maxlength="72" required></label>
         <button class="btn solid" type="submit">Update password</button><p class="form-message" id="pwMessage" role="alert"></p></form></div>
       <div class="panel"><h2>Your recent comments</h2>${data.comments.length ? data.comments.map(c => `
-        <article class="comment"><header><a href="#/movie/${c.movie_id}"><b>${esc(c.title_en)}</b></a><time>${new Date(c.created_at).toLocaleString()}</time></header><p>${esc(c.comment)}</p></article>`).join("")
+        <article class="comment"><header><a href="${moviePath({id:c.movie_id,title_en:c.title_en})}"><b>${esc(c.title_en)}</b></a><time>${new Date(c.created_at).toLocaleString()}</time></header><p>${esc(c.comment)}</p></article>`).join("")
         : `<div class="state">You haven't commented yet.</div>`}</div>`;
     $("pwForm").addEventListener("submit", async ev => {
       ev.preventDefault();
@@ -720,33 +738,43 @@ function dismissBootScreen() {
   window.setTimeout(() => { screen.hidden = true; }, 260);
 }
 
-async function route() {
-  stopActivePlayback();
-  const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
-  let view = "home";
-  if (parts[0] === "movies") view = "movies";
-  else if (parts[0] === "genres") view = "genres";
-  else if (parts[0] === "about") view = "about";
-  else if (parts[0] === "reset-password") view = "reset-password";
-  else if (parts[0] === "profile") view = "profile";
-  else if (parts[0] === "movie" && /^\d+$/.test(parts[1] || "")) view = "movie";
-  document.querySelectorAll(".view").forEach(el => { el.hidden = el.dataset.view !== view; });
-  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("active", a.dataset.nav === (view === "movie" ? "movies" : view)));
-  document.title = "NoAdFrame — Watch. Enjoy. No Ads.";
-  window.scrollTo(0, 0);
-  if (view !== "movies" && view !== "movie") $("searchInput").value = state.filters.q;
-  try {
-    if (view === "home") await showHome();
-    else if (view === "movies") await showMovies();
-    else if (view === "genres") await showGenres();
-    else if (view === "profile") await showProfile();
-    else if (view === "movie") await showMovie(parts[1], parts[2] === "play");
-    else if (view === "reset-password") showResetPassword();
-  } finally {
-    dismissBootScreen();
-  }
+async function route(){
+ stopActivePlayback();
+ const path=location.pathname.replace(/\/+$/,"")||"/";
+ const match=path.match(/^\/movies\/([1-9][0-9]*)(?:\/[^/]+)?$/);
+ let parts=match?["movie",match[1],new URLSearchParams(location.search).get("play")==="1"?"play":""]:location.hash.replace(/^#\/?/,"").split("/").filter(Boolean);
+ let view="home";
+ if(match||(parts[0]==="movie"&&/^[0-9]+$/.test(parts[1]||"")))view="movie";
+ else if(path==="/movies"||parts[0]==="movies")view="movies";
+ else if(path==="/genres"||parts[0]==="genres")view="genres";
+ else if(path==="/about"||parts[0]==="about")view="about";
+ else if(parts[0]==="reset-password")view="reset-password";
+ else if(parts[0]==="profile")view="profile";
+ const meta={
+ home:["NoAdFrame — Watch. Enjoy. No Ads.","NoAdFrame helps you discover movies, IMDb ratings, film details, genres and community conversations.","/"],
+ movies:["Browse Movies — NoAdFrame","Browse the NoAdFrame movie catalogue by title, genre, release year and IMDb rating.","/movies"],
+ genres:["Movie Genres — NoAdFrame","Explore movie genres on NoAdFrame and discover films by category.","/genres"],
+ about:["About NoAdFrame — Watch. Enjoy. No Ads.","Learn about NoAdFrame, a movie discovery website with IMDb ratings, film details and community comments.","/about"],
+ profile:["Your Profile — NoAdFrame","Manage your NoAdFrame account.","/",true],
+ "reset-password":["Reset Password — NoAdFrame","Reset your NoAdFrame account password.","/",true]
+ };
+ if(view!=="movie"){const x=meta[view]||meta.home;updatePageSeo({title:x[0],description:x[1],path:x[2],noindex:!!x[3]});}
+ if(location.pathname==="/"&&["movies","genres","about"].includes(parts[0]))history.replaceState(null,"","/"+parts[0]);
+ document.querySelectorAll(".view").forEach(el=>{el.hidden=el.dataset.view!==view;});
+ document.querySelectorAll("[data-nav]").forEach(a=>a.classList.toggle("active",a.dataset.nav===(view==="movie"?"movies":view)));
+ window.scrollTo(0,0);if(view!=="movies"&&view!=="movie")$("searchInput").value=state.filters.q;
+ try{
+ if(view==="home")await showHome();
+ else if(view==="movies"){await showMovies();$("seoRouteFallback")?.remove();}
+ else if(view==="genres"){await showGenres();$("seoRouteFallback")?.remove();}
+ else if(view==="about")$("seoRouteFallback")?.remove();
+ else if(view==="profile")await showProfile();
+ else if(view==="movie")await showMovie(parts[1],parts[2]==="play"||new URLSearchParams(location.search).get("play")==="1");
+ else if(view==="reset-password")showResetPassword();
+ }finally{dismissBootScreen();}
 }
 window.addEventListener("hashchange", route);
+window.addEventListener("popstate", route);
 window.addEventListener("pagehide", stopActivePlayback);
 
 /* ---------- auth modal ---------- */
