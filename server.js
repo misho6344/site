@@ -21,6 +21,14 @@ const SEO_BASE = (process.env.PUBLIC_SITE_URL || "https://noadframe.onrender.com
 const seoEsc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const seoSlug = v => String(v || "movie").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "movie";
 const seoUrl = p => SEO_BASE + (p.startsWith("/") ? p : "/" + p);
+function isHttpUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 function seoShell({title,description,path,image,graph,body="",noindex=false}) {
  let html=fs.readFileSync(require("path").join(__dirname,"public","index.html"),"utf8");
  const canonical=seoUrl(path), safeTitle=seoEsc(title), safeDesc=seoEsc(description), safeImage=seoEsc(image||seoUrl("/assets/logo.png"));
