@@ -323,6 +323,36 @@ app.post("/api/auth/logout", (_req, res) => {
   res.json({ message: "Logged out." });
 });
 
+app.post("/api/auth/admin-password-recovery", forgotPasswordLimiter, wrap(async (req, res) => {
+  const configuredEmail = String(process.env.PASSWORD_RECOVERY_EMAIL || "").trim().toLowerCase();
+  const configuredSecret = String(process.env.PASSWORD_RECOVERY_SECRET || "");
+  const suppliedSecret = String(req.get("x-recovery-secret") || "");
+  const email = text(req.body?.email, 254).toLowerCase();
+  const nextPassword = req.body?.newPassword;
+
+  if (!configuredEmail || configuredSecret.length < 32) {
+    throw httpError(503, "Password recovery is not configured.");
+  }
+  const expected = Buffer.from(configuredSecret);
+  const supplied = Buffer.from(suppliedSecret);
+  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied) || email !== configuredEmail) {
+    throw httpError(403, "Password recovery authorization failed.");
+  }
+  if (!EMAIL_RE.test(email) || !validPassword(nextPassword)) {
+    throw httpError(400, "Use a valid email and a password of at least 10 characters containing letters and numbers.");
+  }
+
+  const [rows] = await pool.query("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
+  if (!rows.length) throw httpError(404, "The configured recovery account was not found.");
+
+  const passwordHash = await bcrypt.hash(nextPassword, 12);
+  await pool.query(
+    "UPDATE users SET password = ?, password_reset_token_hash = NULL, password_reset_expires_at = NULL WHERE id = ?",
+    [passwordHash, rows[0].id]
+  );
+  res.json({ message: "Password updated successfully. Remove the recovery environment variables from Render now." });
+}));
+
 app.post("/api/auth/forgot-password", forgotPasswordLimiter, wrap(async (req, res) => {
   const email = text(req.body?.email, 254).toLowerCase();
   if (!EMAIL_RE.test(email)) throw httpError(400, "Enter a valid email address.");
