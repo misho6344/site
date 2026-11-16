@@ -49,6 +49,26 @@ async function api(url, options = {}) {
   return data;
 }
 
+const countedMovieViews = new Set();
+function recordMovieView(movie) {
+  const id = String(movie?.id || "");
+  if (!/^[1-9]\d*$/.test(id) || countedMovieViews.has(id)) return;
+  const storageKey = `noadframe:movie-view:${id}`;
+  try {
+    if (sessionStorage.getItem(storageKey) === "1") {
+      countedMovieViews.add(id);
+      return;
+    }
+    sessionStorage.setItem(storageKey, "1");
+  } catch { /* Keep an in-memory guard if session storage is unavailable. */ }
+  countedMovieViews.add(id);
+  api(`/api/movies/${id}/view`, { method: "POST" }).catch(error => {
+    countedMovieViews.delete(id);
+    try { sessionStorage.removeItem(storageKey); } catch { /* storage may be disabled */ }
+    console.warn("Movie view could not be recorded:", error.message);
+  });
+}
+
 let toastTimer;
 function toast(message) {
   const el = $("toast");
@@ -570,6 +590,7 @@ function mountPlayer({ userInitiated = false } = {}) {
   }
 
   document.body.classList.add("player-open");
+  recordMovieView(movie);
   if (isMobilePlayer()) addMobilePlayerFullscreen(box);
 
   if (embed.type === "archive") {
