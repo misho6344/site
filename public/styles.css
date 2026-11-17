@@ -2375,3 +2375,68 @@ body.player-open .chat-panel{
     color:var(--orange) !important;
   }
 }
+/* Quiet, expandable content credits: details appear only after explicit action. */
+.rights-credit{
+  margin:7px 0 14px;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.55;
+}
+.rights-credit-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:6px;
+  min-height:28px;
+  margin:0;
+  padding:3px 2px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:rgba(255,255,255,.43);
+  font:500 11px/1.2 var(--font);
+  letter-spacing:.01em;
+  cursor:pointer;
+  opacity:.78;
+  transition:color .18s ease,opacity .18s ease;
+}
+.rights-credit-toggle:hover,
+.rights-credit-toggle:focus-visible{
+  color:var(--orange);
+  opacity:1;
+}
+.credits-indicator{
+  display:inline-grid;
+  width:14px;
+  height:14px;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:50%;
+  color:inherit;
+  font-size:10px;
+  line-height:1;
+}
+.rights-credit-content{
+  margin-top:5px;
+  padding:8px 11px;
+  border-left:2px solid rgba(255,140,0,.32);
+  border-radius:0 7px 7px 0;
+  background:rgba(255,255,255,.025);
+  color:rgba(255,255,255,.58);
+  font-size:11px;
+  line-height:1.6;
+  overflow-wrap:anywhere;
+}
+.rights-credit-content p{margin:0 0 5px}
+.rights-credit-content p:last-child{margin-bottom:0}
+.rights-credit-content a{color:rgba(255,140,0,.82);text-decoration:none}
+.rights-credit-content a:hover{text-decoration:underline;color:var(--orange)}
+@media(max-width:700px){
+  .rights-credit{margin:5px 0 12px}
+  .rights-credit-toggle{min-height:26px;font-size:10px}
+  .rights-credit-content{padding:7px 9px;font-size:10px}
+}
