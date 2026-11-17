@@ -198,9 +198,13 @@ async function showHome() {
     const banners = featured.length ? featured : [all.find(m => safeUrl(m.backdrop_url)) || data.topRated[0] || all[0]].filter(Boolean);
     $("hero").innerHTML = banners.length ? heroHTML(banners) : heroEmptyHTML();
     if(bannerConfig.active&&safeUrl(bannerConfig.imageUrl)){
-      const heroImage=$("hero").querySelector(".hero-bg");
-      if(heroImage){heroImage.src=bannerConfig.imageUrl;heroImage.alt="";}
-      else $("hero").innerHTML='<section class="hero hero-slide active"><img class="hero-bg" src="'+esc(bannerConfig.imageUrl)+'" alt=""><div class="hero-copy"><span class="hero-tag">Welcome</span><h1>Watch. Enjoy.<br><span class="grad">No Ads.</span></h1><p>Discover movies on NoAdFrame.</p><div class="hero-actions"><a class="btn solid" href="#/movies">Browse Movies</a></div></div></section>';
+      if(banners.length){
+        $("hero").innerHTML=heroSlideHTML(banners[0]);
+        const heroImage=$("hero").querySelector(".hero-bg");
+        if(heroImage)heroImage.src=bannerConfig.imageUrl;
+      }else{
+        $("hero").innerHTML='<section class="hero hero-slide active"><img class="hero-bg" src="'+esc(bannerConfig.imageUrl)+'" alt=""><div class="hero-copy"><span class="hero-tag">Welcome</span><h1>Watch. Enjoy.<br><span class="grad">No Ads.</span></h1><p>Discover movies on NoAdFrame.</p><div class="hero-actions"><a class="btn solid" href="#/movies">Browse Movies</a></div></div></section>';
+      }
     }
     const heroCarousel = $("hero").querySelector("[data-hero-carousel]");
     if (heroCarousel) heroCarousel.addEventListener("click", (event) => {
