@@ -29,7 +29,7 @@ function isHttpUrl(value) {
     return false;
   }
 }
-function seoShell({title,description,path,image,graph,body="",noindex=false}) {
+function seoShell({title,description,path,image,graph,body="",noindex=false,ogType="website"}) {
  let html=fs.readFileSync(require("path").join(__dirname,"public","index.html"),"utf8");
  const canonical=seoUrl(path), safeTitle=seoEsc(title), safeDesc=seoEsc(description), safeImage=seoEsc(image||seoUrl("/assets/logo.png"));
  const put=(re,tag)=>{html=re.test(html)?html.replace(re,tag):html.replace("</head>",tag+"\n</head>");};
@@ -38,11 +38,15 @@ function seoShell({title,description,path,image,graph,body="",noindex=false}) {
  put(/<link rel="canonical"[^>]*>/i,'<link rel="canonical" href="'+seoEsc(canonical)+'">');
  put(/<meta name="robots"[^>]*>/i,'<meta name="robots" content="'+(noindex?"noindex, nofollow":"index, follow")+'">');
  for(const [re,tag] of [
+  [/<meta property="og:type"[^>]*>/i,'<meta property="og:type" content="'+seoEsc(ogType)+'">'],
   [/<meta property="og:title"[^>]*>/i,'<meta property="og:title" content="'+safeTitle+'">'],
   [/<meta property="og:description"[^>]*>/i,'<meta property="og:description" content="'+safeDesc+'">'],
   [/<meta property="og:url"[^>]*>/i,'<meta property="og:url" content="'+seoEsc(canonical)+'">'],
   [/<meta property="og:image"[^>]*>/i,'<meta property="og:image" content="'+safeImage+'">'],
-  [/<meta name="twitter:card"[^>]*>/i,'<meta name="twitter:card" content="summary_large_image">']
+  [/<meta name="twitter:card"[^>]*>/i,'<meta name="twitter:card" content="summary_large_image">'],
+  [/<meta name="twitter:title"[^>]*>/i,'<meta name="twitter:title" content="'+safeTitle+'">'],
+  [/<meta name="twitter:description"[^>]*>/i,'<meta name="twitter:description" content="'+safeDesc+'">'],
+  [/<meta name="twitter:image"[^>]*>/i,'<meta name="twitter:image" content="'+safeImage+'">']
  ]) put(re,tag);
  if(graph) html=html.replace("</head>",'<script id="pageStructuredData" type="application/ld+json">'+JSON.stringify(graph).replace(/</g,"\\u003c")+'</script>\n</head>');
  if(body) html=html.replace('<main id="app">','<main id="app">'+body);
@@ -863,37 +867,137 @@ app.post("/api/copyright/report", copyrightReportLimiter, wrap(async (req, res) 
 }));
 
 
-app.get("/robots.txt",(_req,res)=>res.type("text/plain").send("User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: "+seoUrl("/sitemap.xml")+"\n"));
-app.get("/sitemap.xml",wrap(async(_req,res)=>{
- const [rows]=await pool.query("SELECT id,title_en,created_at FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en)<>'' ORDER BY id");
- const paths=["/","/movies","/genres","/about",...rows.map(m=>"/movies/"+m.id+"/"+seoSlug(m.title_en))];
- const xml='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+paths.map(p=>"<url><loc>"+seoEsc(seoUrl(p))+"</loc></url>").join("")+"</urlset>";
- res.set("Cache-Control","public, max-age=300");res.type("application/xml").send(xml);
+const SITEMAP_MOVIE_BATCH_SIZE = 45000;
+const SITEMAP_STATIC_ROUTES = ["/", "/movies", "/genres", "/about"];
+const SITEMAP_URLSET_OPEN = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+const SITEMAP_INDEX_OPEN = '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+function sitemapUrlEntry(route) {
+  return "<url><loc>" + seoEsc(seoUrl(route)) + "</loc></url>";
+}
+function sendSitemap(res, entries) {
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+  res.type("application/xml").send(SITEMAP_URLSET_OPEN + entries.join("") + "</urlset>");
+}
+app.get("/robots.txt", (_req, res) => {
+  res.set("Cache-Control", "public, max-age=3600");
+  res.type("text/plain").send("User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: " + seoUrl("/sitemap.xml") + "\n");
+});
+app.get("/sitemap.xml", wrap(async (_req, res) => {
+  const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> ''");
+  const total = Number(count?.total) || 0;
+  const pageCount = Math.max(1, Math.ceil(total / SITEMAP_MOVIE_BATCH_SIZE));
+
+  if (pageCount === 1) {
+    const [rows] = await pool.query("SELECT id, title_en FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id");
+    const entries = [
+      ...SITEMAP_STATIC_ROUTES.map(sitemapUrlEntry),
+      ...rows.map(movie => sitemapUrlEntry("/movies/" + movie.id + "/" + seoSlug(movie.title_en)))
+    ];
+    return sendSitemap(res, entries);
+  }
+
+  const sitemapPaths = ["/sitemap-static.xml"];
+  for (let page = 1; page <= pageCount; page++) sitemapPaths.push("/sitemap-movies-" + page + ".xml");
+  const xml = SITEMAP_INDEX_OPEN + sitemapPaths.map(route =>
+    "<sitemap><loc>" + seoEsc(seoUrl(route)) + "</loc></sitemap>"
+  ).join("") + "</sitemapindex>";
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+  res.type("application/xml").send(xml);
 }));
-app.get("/movies/:id/:slug?",wrap(async(req,res)=>{
- if(!/^[1-9][0-9]*$/.test(req.params.id))return res.status(404).type("html").send(seoShell({title:"Movie not found — NoAdFrame",description:"Movie not found.",path:"/",noindex:true}));
- const [rows]=await pool.query("SELECT m.* FROM movies m WHERE id=?",[req.params.id]);
- if(!rows.length)return res.status(404).type("html").send(seoShell({title:"Movie not found — NoAdFrame",description:"Movie not found.",path:"/",noindex:true}));
- const m=suppressRetiredVideos(rows)[0], slug=seoSlug(m.title_en), route="/movies/"+m.id+"/"+slug;
- if(req.path!==route)return res.redirect(301,route);
- const name=m.title_ka?m.title_ka+" ("+m.title_en+")":m.title_en;
- const desc=String(m.description||name+" — movie details, cast and IMDb information on NoAdFrame.").replace(/\s+/g," ").slice(0,300);
- const graph={"@context":"https://schema.org","@type":"Movie","name":m.title_en,"description":desc,"url":seoUrl(route)};
- if(m.title_ka)graph.alternateName=m.title_ka;if(m.release_year)graph.datePublished=String(m.release_year);
- if(m.genre)graph.genre=m.genre.split(",").map(x=>x.trim());if(m.director)graph.director={"@type":"Person","name":m.director};
- if(m.actors)graph.actor=m.actors.split(",").map(x=>({"@type":"Person","name":x.trim()}));
- if(m.poster_url&&isHttpUrl(m.poster_url))graph.image=m.poster_url;
- if(/^tt[0-9]{6,10}$/.test(m.imdb_id||""))graph.sameAs="https://www.imdb.com/title/"+m.imdb_id+"/";
- const crumb={"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":seoUrl("/")},{"@type":"ListItem","position":2,"name":"Movies","item":seoUrl("/movies")},{"@type":"ListItem","position":3,"name":m.title_en,"item":seoUrl(route)}]};
- const poster=m.poster_url&&isHttpUrl(m.poster_url)?'<img src="'+seoEsc(m.poster_url)+'" alt="'+seoEsc(name)+' poster" width="240" height="360">':"";
- const body='<section id="seoMovieContent"><h1>'+seoEsc(name)+'</h1>'+poster+'<p>'+seoEsc(desc)+'</p><p>'+(m.release_year||"")+' · IMDb '+seoEsc(m.imdb_rating||"N/A")+' · '+seoEsc(m.genre||"")+'</p><a href="#/movie/'+m.id+'">Open movie</a></section>';
- res.set("Cache-Control","public, max-age=300");res.type("html").send(seoShell({title:name+" — NoAdFrame",description:desc,path:route,image:m.poster_url,graph:{"@context":"https://schema.org","@graph":[graph,crumb]},body}));
+app.get("/sitemap-static.xml", (_req, res) => {
+  sendSitemap(res, SITEMAP_STATIC_ROUTES.map(sitemapUrlEntry));
+});
+app.get(/^\/sitemap-movies-(\d+)\.xml$/, wrap(async (req, res) => {
+  const page = Number(req.params[0]);
+  if (!Number.isSafeInteger(page) || page < 1) return res.status(404).type("text/plain").send("Sitemap page not found.");
+  const offset = (page - 1) * SITEMAP_MOVIE_BATCH_SIZE;
+  const [rows] = await pool.query(
+    "SELECT id, title_en FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id LIMIT ? OFFSET ?",
+    [SITEMAP_MOVIE_BATCH_SIZE, offset]
+  );
+  if (!rows.length) return res.status(404).type("text/plain").send("Sitemap page not found.");
+  sendSitemap(res, rows.map(movie => sitemapUrlEntry("/movies/" + movie.id + "/" + seoSlug(movie.title_en))));
 }));
-for(const [route,title,description,h1] of [
- ["/movies","Browse Movies — NoAdFrame","Browse movies by title, genre, year and IMDb rating.","Browse Movies"],
- ["/genres","Movie Genres — NoAdFrame","Explore movie genres on NoAdFrame.","Movie Genres"],
- ["/about","About NoAdFrame","Learn about NoAdFrame and discover movies.","About NoAdFrame"]
-])app.get(route,(_req,res)=>res.type("html").send(seoShell({title,description,path:route,body:"<section id='seoRouteFallback'><h1>"+h1+"</h1></section>"})));
+app.get("/movies/:id/:slug?", wrap(async (req, res) => {
+  if (!/^[1-9][0-9]*$/.test(req.params.id)) {
+    return res.status(404).type("html").send(seoShell({
+      title: "Movie not found — NoAdFrame", description: "Movie not found.", path: "/", noindex: true
+    }));
+  }
+  const [rows] = await pool.query("SELECT m.* FROM movies m WHERE id = ?", [req.params.id]);
+  if (!rows.length) {
+    return res.status(404).type("html").send(seoShell({
+      title: "Movie not found — NoAdFrame", description: "Movie not found.", path: "/", noindex: true
+    }));
+  }
+
+  const m = suppressRetiredVideos(rows)[0];
+  const slug = seoSlug(m.title_en);
+  const route = "/movies/" + m.id + "/" + slug;
+  if (req.path !== route) return res.redirect(301, route);
+
+  const name = m.title_ka ? m.title_ka + " (" + m.title_en + ")" : m.title_en;
+  const details = [
+    m.release_year ? String(m.release_year) : "",
+    m.imdb_rating ? "IMDb " + m.imdb_rating : "",
+    m.genre || ""
+  ].filter(Boolean).join(" · ");
+  const summary = String(m.description || name + " — movie details, cast and IMDb information on NoAdFrame.")
+    .replace(/\s+/g, " ").trim().slice(0, 280);
+  const desc = details ? summary + " " + details : summary;
+
+  const graph = {
+    "@context": "https://schema.org",
+    "@type": "Movie",
+    "name": m.title_en,
+    "description": summary,
+    "url": seoUrl(route)
+  };
+  if (m.title_ka) graph.alternateName = m.title_ka;
+  if (m.release_year) graph.datePublished = String(m.release_year);
+  if (m.genre) graph.genre = m.genre.split(",").map(value => value.trim()).filter(Boolean);
+  if (m.director) graph.director = { "@type": "Person", "name": m.director };
+  if (m.actors) graph.actor = m.actors.split(",").map(value => value.trim()).filter(Boolean).map(value => ({ "@type": "Person", "name": value }));
+  if (m.poster_url && isHttpUrl(m.poster_url)) graph.image = m.poster_url;
+  if (/^tt[0-9]{6,10}$/.test(m.imdb_id || "")) graph.sameAs = "https://www.imdb.com/title/" + m.imdb_id + "/";
+
+  const crumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": seoUrl("/") },
+      { "@type": "ListItem", "position": 2, "name": "Movies", "item": seoUrl("/movies") },
+      { "@type": "ListItem", "position": 3, "name": m.title_en, "item": seoUrl(route) }
+    ]
+  };
+  const poster = m.poster_url && isHttpUrl(m.poster_url)
+    ? '<img src="' + seoEsc(m.poster_url) + '" alt="' + seoEsc(name) + ' poster" width="240" height="360">'
+    : "";
+  const body = '<section id="seoMovieContent"><h1>' + seoEsc(name) + '</h1>' + poster
+    + '<p>' + seoEsc(summary) + '</p><p>' + seoEsc(details) + '</p>'
+    + (m.director ? '<p>Director: ' + seoEsc(m.director) + '</p>' : "")
+    + (m.actors ? '<p>Cast: ' + seoEsc(m.actors) + '</p>' : "")
+    + '<a href="#/movie/' + encodeURIComponent(String(m.id)) + '">Open movie</a></section>';
+
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+  res.type("html").send(seoShell({
+    title: name + " — NoAdFrame",
+    description: desc,
+    path: route,
+    image: m.poster_url,
+    graph: { "@context": "https://schema.org", "@graph": [graph, crumb] },
+    body,
+    ogType: "video.movie"
+  }));
+}));
+for (const [route, title, description, h1] of [
+  ["/movies", "Browse Movies — NoAdFrame", "Browse movies by title, genre, year and IMDb rating.", "Browse Movies"],
+  ["/genres", "Movie Genres — NoAdFrame", "Explore movie genres on NoAdFrame.", "Movie Genres"],
+  ["/about", "About NoAdFrame", "Learn about NoAdFrame and discover movies.", "About NoAdFrame"]
+]) app.get(route, (_req, res) => res.type("html").send(seoShell({
+  title, description, path: route,
+  body: "<section id='seoRouteFallback'><h1>" + h1 + "</h1><p>" + seoEsc(description) + "</p></section>"
+})));
 
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
