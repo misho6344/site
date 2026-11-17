@@ -505,6 +505,23 @@ const categoryResponseCache = { data: null, expiresAt: 0, staleUntil: 0 };
 const CATEGORY_CACHE_TTL_MS = 30_000;
 const CATEGORY_CACHE_STALE_MS = 5 * 60_000;
 
+async function getHomepageMovieSection(key,defaultRows){
+  const [settings]=await pool.query("SELECT movie_ids FROM site_home_sections WHERE section_key=? LIMIT 1",[key]);
+  if(!settings.length)return defaultRows;
+  let ids;
+  try{
+    ids=JSON.parse(String(settings[0].movie_ids||"[]"));
+    if(!Array.isArray(ids))return defaultRows;
+    ids=ids.map(Number).filter(id=>Number.isSafeInteger(id)&&id>0).slice(0,12);
+  }catch{return defaultRows}
+  if(!ids.length)return [];
+  const [rows]=await pool.query(
+    "SELECT m.*,m.video_url AS source_url,CASE WHEN m.video_url IS NOT NULL AND m.video_url<>'' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE m.id IN (?)",
+    [ids]
+  );
+  const byId=new Map(rows.map(movie=>[Number(movie.id),movie]));
+  return suppressRetiredVideos(ids.map(id=>byId.get(id)).filter(Boolean));
+}
 app.get("/api/movies/categories", wrap(async (_req, res) => {
   const now = Date.now();
   if (categoryResponseCache.data && now < categoryResponseCache.expiresAt) {
@@ -526,11 +543,16 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
       pool.query("SELECT m.*, video_url AS source_url, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE (video_url IS NOT NULL AND video_url <> '') OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
     ]);
 
+    const [curatedPopular,curatedTopRated,curatedNewReleases]=await Promise.all([
+      getHomepageMovieSection("popular",popular),
+      getHomepageMovieSection("topRated",topRated),
+      getHomepageMovieSection("newReleases",newReleases)
+    ]);
     const data = {
       featured: suppressRetiredVideos(featuredRows),
-      popular: suppressRetiredVideos(popular),
-      topRated: suppressRetiredVideos(topRated),
-      newReleases: suppressRetiredVideos(newReleases)
+      popular: curatedPopular,
+      topRated: curatedTopRated,
+      newReleases: curatedNewReleases
     };
     categoryResponseCache.data = data;
     categoryResponseCache.expiresAt = Date.now() + CATEGORY_CACHE_TTL_MS;
@@ -848,6 +870,8 @@ async function start() {
   pool = createPool();
   await initSchema(pool);
   await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+  await pool.query("CREATE TABLE IF NOT EXISTS site_home_sections (section_key VARCHAR(32) NOT NULL PRIMARY KEY, movie_ids MEDIUMTEXT NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 
 
   const server = http.createServer(app);
