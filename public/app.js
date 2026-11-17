@@ -211,13 +211,26 @@ async function showHome() {
       heroRoot.innerHTML=fallback.length?heroHTML(fallback):heroEmptyHTML();
     }
     const carousel=heroRoot.querySelector("[data-hero-carousel]");
-    if(carousel)carousel.addEventListener("click",event=>{
-      const dot=event.target.closest("[data-hero-index]");
-      if(!dot)return;
-      const index=Number(dot.dataset.heroIndex);
-      carousel.querySelectorAll(".hero-slide").forEach((slide,i)=>slide.classList.toggle("active",i===index));
-      carousel.querySelectorAll(".hero-dot").forEach((button,i)=>button.classList.toggle("active",i===index));
-    });
+    if(carousel){
+      let activeIndex=0;
+      const slides=carousel.querySelectorAll(".hero-slide");
+      const dots=carousel.querySelectorAll(".hero-dot");
+      const showSlide=index=>{
+        activeIndex=(index+slides.length)%slides.length;
+        slides.forEach((slide,i)=>slide.classList.toggle("active",i===activeIndex));
+        dots.forEach((button,i)=>button.classList.toggle("active",i===activeIndex));
+      };
+      carousel.addEventListener("click",event=>{
+        const dot=event.target.closest("[data-hero-index]");
+        if(!dot)return;
+        showSlide(Number(dot.dataset.heroIndex));
+      });
+      if(slides.length>1){
+        let timer=setInterval(()=>showSlide(activeIndex+1),6500);
+        carousel.addEventListener("mouseenter",()=>clearInterval(timer));
+        carousel.addEventListener("mouseleave",()=>{clearInterval(timer);timer=setInterval(()=>showSlide(activeIndex+1),6500)});
+      }
+    }
     const sections=[["Popular Movies",popular,"popular"],["Top Rated",topRated,"rating"],["New Releases",newReleases,"year"]];
     rowsRoot.innerHTML=sections.filter(([,list])=>list.length).map(([title,list,sort])=>`
       <section class="row"><div class="row-head"><h2>${title}</h2><a href="#/movies" data-sort="${sort}">See all</a></div>
