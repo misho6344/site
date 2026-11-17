@@ -919,7 +919,7 @@ async function route(){
  else if(view==="genres"){await showGenres();$("seoRouteFallback")?.remove();}
  else if(view==="about")$("seoRouteFallback")?.remove();
  else if(view==="profile")await showProfile();
- else if(view==="movie")await showMovie(parts[1],parts[2]==="play"||new URLSearchParams(location.search).get("play")==="1");
+ else if(view==="movie"){await showMovie(parts[1],parts[2]==="play"||new URLSearchParams(location.search).get("play")==="1");$("seoMovieContent")?.remove();}
  else if(view==="reset-password")showResetPassword();
  }finally{dismissBootScreen();}
 }
