@@ -2330,3 +2330,48 @@ body.player-open .chat-panel{
   .description-block .desc{margin:0;font-size:13px;line-height:1.6}
   .description-toggle{min-height:36px;font-size:12px}
 }
+
+/* Portrait navigation controls reuse the desktop web pill treatment exactly.
+   Only dimensions are reduced to fit a phone; colors, states and radii match. */
+@media (max-width:700px) and (orientation:portrait) {
+  .main-nav a {
+    border:1px solid transparent !important;
+    border-radius:999px !important;
+    background:transparent !important;
+    color:var(--muted) !important;
+    font-weight:500 !important;
+    transition:color .2s, background .2s, border-color .2s;
+  }
+
+  .main-nav a:hover,
+  .main-nav a:focus-visible {
+    background:rgba(255,255,255,.06) !important;
+    color:var(--white) !important;
+  }
+
+  .main-nav a.active,
+  .main-nav a[aria-current="page"] {
+    border-color:var(--orange) !important;
+    background:var(--orange) !important;
+    color:var(--black) !important;
+  }
+
+  #loginBtn,
+  #profileLink {
+    border:1px solid var(--line) !important;
+    border-radius:999px !important;
+    background:transparent !important;
+    color:var(--muted) !important;
+    font-weight:600 !important;
+    transition:color .2s, background .2s, border-color .2s, box-shadow .2s;
+  }
+
+  #loginBtn:hover,
+  #profileLink:hover,
+  #loginBtn:focus-visible,
+  #profileLink:focus-visible {
+    border-color:var(--orange) !important;
+    background:rgba(255,140,0,.08) !important;
+    color:var(--orange) !important;
+  }
+}
