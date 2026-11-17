@@ -925,3 +925,270 @@ body.player-open .chat-panel{
   .hero-carousel-dots .hero-dot{width:13px;min-width:13px;height:4px}
   .hero-carousel-dots .hero-dot.active{width:26px;min-width:26px;height:4px}
 }
+
+/* Final mobile header layout: compact two-row portrait and one-row landscape. */
+@media(max-width:700px) and (orientation:portrait){
+  .topbar{
+    position:sticky!important;
+    top:0;
+    z-index:60;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.42fr);
+    grid-template-areas:"brand actions" "nav nav";
+    align-items:center;
+    gap:4px 8px;
+    width:100%;
+    min-height:0;
+    padding:5px var(--pad) 6px;
+  }
+  .brand{
+    grid-area:brand;
+    display:flex!important;
+    min-width:0;
+    justify-content:flex-start;
+    align-items:center;
+    gap:5px;
+  }
+  .brand-logo{width:25px;height:25px;flex:0 0 25px}
+  .brand-text{
+    display:block;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:clamp(12px,3.7vw,15px);
+    line-height:1;
+  }
+  .main-nav{
+    grid-area:nav;
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    align-items:stretch;
+    gap:4px;
+    width:100%;
+    min-width:0;
+    margin:0;
+    padding:0;
+    overflow:visible;
+  }
+  .main-nav a{
+    display:flex!important;
+    min-width:0;
+    min-height:32px;
+    width:100%;
+    align-items:center;
+    justify-content:center;
+    padding:5px 1px;
+    border-radius:8px;
+    font-size:clamp(10px,2.8vw,11.5px);
+    line-height:1;
+    white-space:nowrap;
+  }
+  .header-actions{
+    grid-area:actions;
+    display:flex!important;
+    align-items:center;
+    justify-content:flex-end;
+    gap:6px;
+    width:100%;
+    min-width:0;
+    margin:0;
+  }
+  .searchbox,.searchbox:focus-within{
+    position:relative;
+    flex:0 0 28px;
+    width:28px;
+    min-width:28px;
+    height:30px;
+    display:flex!important;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    border:0;
+    background:transparent;
+  }
+  .searchbox svg{width:18px;height:18px;flex:0 0 18px}
+  .searchbox input{display:none!important}
+  .searchbox.is-open{
+    position:absolute;
+    z-index:70;
+    top:calc(100% + 4px);
+    left:var(--pad);
+    right:var(--pad);
+    width:auto;
+    height:42px;
+    display:flex!important;
+    justify-content:flex-start;
+    gap:8px;
+    padding:0 12px;
+    border:1px solid rgba(255,140,0,.55);
+    border-radius:11px;
+    background:var(--panel);
+    box-shadow:0 12px 28px rgba(0,0,0,.55);
+  }
+  .searchbox.is-open input{
+    display:block!important;
+    flex:1 1 auto;
+    width:100%;
+    min-width:0;
+    font-size:16px;
+  }
+  .auth-actions{
+    display:flex!important;
+    flex:0 1 auto;
+    align-items:center;
+    justify-content:flex-end;
+    gap:0;
+    min-width:0;
+    max-width:none;
+  }
+  .auth-actions .btn{
+    display:flex;
+    flex:0 1 auto;
+    min-width:0;
+    min-height:30px;
+    max-width:none;
+    align-items:center;
+    justify-content:center;
+    padding:5px 9px;
+    font-size:10.5px;
+    line-height:1;
+    white-space:nowrap;
+  }
+  #registerBtn,#logoutBtn{display:none!important}
+  #loginBtn,#profileLink{display:flex!important}
+  #guestActions[hidden],#userActions[hidden]{display:none!important}
+}
+@media(max-width:700px) and (orientation:landscape) and (max-height:560px) and (pointer:coarse){
+  .topbar{
+    position:sticky!important;
+    top:0;
+    z-index:60;
+    display:grid!important;
+    grid-template-columns:minmax(88px,.95fr) minmax(0,2.8fr) minmax(100px,1.15fr);
+    grid-template-areas:"brand nav actions";
+    align-items:center;
+    gap:4px 8px;
+    width:100%;
+    min-height:0;
+    padding:4px 10px;
+  }
+  .brand{
+    grid-area:brand;
+    display:flex!important;
+    min-width:0;
+    justify-content:flex-start;
+    align-items:center;
+    gap:4px;
+  }
+  .brand-logo{width:22px;height:22px;flex:0 0 22px}
+  .brand-text{
+    display:block;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:clamp(11px,1.8vw,14px);
+    line-height:1;
+  }
+  .main-nav{
+    grid-area:nav;
+    display:flex!important;
+    align-items:center;
+    justify-content:space-evenly;
+    gap:3px;
+    width:100%;
+    min-width:0;
+    margin:0;
+    padding:0;
+    overflow:hidden;
+  }
+  .main-nav a{
+    display:flex!important;
+    flex:1 1 0;
+    min-width:0;
+    min-height:30px;
+    align-items:center;
+    justify-content:center;
+    padding:4px 3px;
+    border-radius:7px;
+    font-size:clamp(9px,1.6vw,11px);
+    line-height:1;
+    white-space:nowrap;
+  }
+  .header-actions{
+    grid-area:actions;
+    display:flex!important;
+    align-items:center;
+    justify-content:flex-end;
+    gap:4px;
+    width:100%;
+    min-width:0;
+    margin:0;
+  }
+  .searchbox,.searchbox:focus-within{
+    position:relative;
+    flex:0 0 26px;
+    width:26px;
+    min-width:26px;
+    height:28px;
+    display:flex!important;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    border:0;
+    background:transparent;
+  }
+  .searchbox input{display:none!important}
+  .searchbox.is-open{
+    position:absolute;
+    z-index:70;
+    top:calc(100% + 4px);
+    left:10px;
+    right:10px;
+    width:auto;
+    height:38px;
+    display:flex!important;
+    justify-content:flex-start;
+    padding:0 10px;
+    border:1px solid rgba(255,140,0,.55);
+    border-radius:10px;
+    background:var(--panel);
+  }
+  .searchbox.is-open input{display:block!important;flex:1 1 auto;min-width:0;font-size:16px}
+  .auth-actions{
+    display:flex!important;
+    flex:0 1 auto;
+    align-items:center;
+    justify-content:flex-end;
+    gap:0;
+    min-width:0;
+    max-width:none;
+  }
+  .auth-actions .btn{
+    display:flex;
+    flex:0 1 auto;
+    min-width:0;
+    min-height:28px;
+    align-items:center;
+    justify-content:center;
+    padding:4px 7px;
+    font-size:9.5px;
+    line-height:1;
+    white-space:nowrap;
+  }
+  #registerBtn,#logoutBtn{display:none!important}
+  #loginBtn,#profileLink{display:flex!important}
+  #guestActions[hidden],#userActions[hidden]{display:none!important}
+  .main-nav a[data-nav="home"]{display:flex!important}
+}
+@media(max-width:380px) and (orientation:portrait){
+  .topbar{gap:3px 6px;padding:4px 10px 5px}
+  .brand-logo{width:23px;height:23px;flex-basis:23px}
+  .brand-text{font-size:12px}
+  .main-nav{gap:3px}
+  .main-nav a{min-height:30px;font-size:9.5px}
+  .header-actions{gap:3px}
+  .searchbox,.searchbox:focus-within{flex-basis:26px;width:26px;min-width:26px}
+  .auth-actions .btn{padding-inline:7px;font-size:9.5px}
+}
