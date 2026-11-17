@@ -306,6 +306,20 @@ app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   res.json({ videoUrl, format: selected.format || null });
 }));
 
+app.get("/api/site-banner", wrap(async (_req,res)=>{
+  const [rows]=await pool.query("SELECT image_url,image_data IS NOT NULL AS has_image,UNIX_TIMESTAMP(updated_at)*1000 AS version FROM site_banner WHERE id=1 LIMIT 1");
+  const row=rows[0];
+  const version=row?Number(row.version||Date.now()):null;
+  const imageUrl=!row?"":(row.image_url|| (row.has_image?SEO_BASE+"/api/site-banner/image?v="+version:""));
+  res.set("Cache-Control","public, max-age=30, stale-while-revalidate=120");
+  res.json({active:Boolean(imageUrl),imageUrl,mode:row?(row.image_url?"url":(row.has_image?"upload":"none")):"none",updatedAt:version});
+}));
+app.get("/api/site-banner/image", wrap(async (_req,res)=>{
+  const [rows]=await pool.query("SELECT image_data,mime_type FROM site_banner WHERE id=1 LIMIT 1");
+  if(!rows.length||!rows[0].image_data)return res.status(404).end();
+  res.set({"Content-Type":rows[0].mime_type||"application/octet-stream","Cache-Control":"public, max-age=31536000, immutable","X-Content-Type-Options":"nosniff"});
+  res.end(rows[0].image_data);
+}));
 app.get("/api/health", healthLimiter, wrap(async (_req, res) => {
   await pool.query("SELECT 1");
   res.json({ status: "ok", database: "connected" });
@@ -833,6 +847,8 @@ app.use((error, req, res, next) => {
 async function start() {
   pool = createPool();
   await initSchema(pool);
+  await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 
   const server = http.createServer(app);
   server.headersTimeout = 10_000;

@@ -184,7 +184,10 @@ document.addEventListener("error", (e) => {
 async function showHome() {
   $("hero").innerHTML = ""; $("homeRows").innerHTML = "";
   try {
-    const data = await api("/api/movies/categories");
+    const [data,bannerConfig] = await Promise.all([
+      api("/api/movies/categories"),
+      api("/api/site-banner").catch(()=>({active:false,imageUrl:""}))
+    ]);
     const all = [...(data.featured || []), ...data.topRated, ...data.newReleases, ...data.popular];
     rememberMovies(all);
     warmArchiveVideoSources(all, 3);
@@ -194,6 +197,11 @@ async function showHome() {
     const featured = [mickey, holdovers].filter((movie, index, list) => movie && list.findIndex(x => x && x.id === movie.id) === index);
     const banners = featured.length ? featured : [all.find(m => safeUrl(m.backdrop_url)) || data.topRated[0] || all[0]].filter(Boolean);
     $("hero").innerHTML = banners.length ? heroHTML(banners) : heroEmptyHTML();
+    if(bannerConfig.active&&safeUrl(bannerConfig.imageUrl)){
+      const heroImage=$("hero").querySelector(".hero-bg");
+      if(heroImage){heroImage.src=bannerConfig.imageUrl;heroImage.alt="";}
+      else $("hero").innerHTML='<section class="hero hero-slide active"><img class="hero-bg" src="'+esc(bannerConfig.imageUrl)+'" alt=""><div class="hero-copy"><span class="hero-tag">Welcome</span><h1>Watch. Enjoy.<br><span class="grad">No Ads.</span></h1><p>Discover movies on NoAdFrame.</p><div class="hero-actions"><a class="btn solid" href="#/movies">Browse Movies</a></div></div></section>';
+    }
     const heroCarousel = $("hero").querySelector("[data-hero-carousel]");
     if (heroCarousel) heroCarousel.addEventListener("click", (event) => {
       const dot = event.target.closest("[data-hero-index]");
