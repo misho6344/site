@@ -883,3 +883,45 @@ body.player-open .chat-panel{
   .player.player-mobile-fullscreen{padding:0!important}
   .player.player-mobile-fullscreen .player-media{object-fit:contain}
 }
+
+/* Homepage carousel: hide side arrows and keep compact slide indicators at bottom-right. */
+.hero-nav{display:none!important}
+.hero-carousel-dots{
+  right:var(--pad)!important;
+  left:auto!important;
+  bottom:18px!important;
+  transform:none!important;
+  display:flex!important;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  z-index:5;
+}
+.hero-carousel-dots .hero-dot{
+  width:15px;
+  height:4px;
+  min-width:15px;
+  border:0;
+  border-radius:999px;
+  padding:0;
+  background:rgba(255,255,255,.48);
+  transition:width .2s ease,background-color .2s ease;
+}
+.hero-carousel-dots .hero-dot.active{
+  width:30px;
+  min-width:30px;
+  height:4px;
+  border-radius:999px;
+  background:var(--orange);
+}
+@media(max-width:700px){
+  .hero-carousel-dots{
+    right:14px!important;
+    bottom:12px!important;
+    left:auto!important;
+    transform:none!important;
+    gap:6px;
+  }
+  .hero-carousel-dots .hero-dot{width:13px;min-width:13px;height:4px}
+  .hero-carousel-dots .hero-dot.active{width:26px;min-width:26px;height:4px}
+}
