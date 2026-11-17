@@ -827,7 +827,7 @@ body.player-open .chat-panel{
   .page,.narrow{width:100%;max-width:100%;min-width:0}
   .hero-carousel,.hero-carousel-slides,.hero-carousel .hero-slide{min-height:clamp(390px,68svh,560px)}
   .hero-carousel .hero-slide{padding-bottom:48px}
-  .hero-carousel .hero-slide .hero-content{width:min(100%,620px);padding:0 var(--pad)}
+  .hero-carousel .hero-slide .hero-copy{width:min(100%,620px);padding:0 var(--pad)}
   .hero-carousel .hero-slide h1{font-size:clamp(28px,8vw,42px);line-height:1.08}
   .hero-carousel .hero-slide p{max-width:58ch;font-size:14px;line-height:1.55}
   .hero-nav{width:34px;height:34px;font-size:24px}
