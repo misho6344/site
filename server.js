@@ -514,13 +514,14 @@ async function getHomepageMovieSection(key,defaultRows){
     if(!Array.isArray(ids))return defaultRows;
     ids=ids.map(Number).filter(id=>Number.isSafeInteger(id)&&id>0).slice(0,12);
   }catch{return defaultRows}
-  if(!ids.length)return [];
+  if(!ids.length)return defaultRows;
   const [rows]=await pool.query(
     "SELECT m.*,m.video_url AS source_url,CASE WHEN m.video_url IS NOT NULL AND m.video_url<>'' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE m.id IN (?)",
     [ids]
   );
   const byId=new Map(rows.map(movie=>[Number(movie.id),movie]));
-  return suppressRetiredVideos(ids.map(id=>byId.get(id)).filter(Boolean));
+  const curated=suppressRetiredVideos(ids.map(id=>byId.get(id)).filter(Boolean));
+  return curated.length?curated:defaultRows;
 }
 app.get("/api/movies/categories", wrap(async (_req, res) => {
   const now = Date.now();
