@@ -221,14 +221,17 @@ async function showHome() {
         dots.forEach((button,i)=>button.classList.toggle("active",i===activeIndex));
       };
       carousel.addEventListener("click",event=>{
+        const control=event.target.closest("[data-hero-nav]");
+        if(control){
+          showSlide(activeIndex+Number(control.dataset.heroNav));
+          return;
+        }
         const dot=event.target.closest("[data-hero-index]");
-        if(!dot)return;
-        showSlide(Number(dot.dataset.heroIndex));
+        if(dot)showSlide(Number(dot.dataset.heroIndex));
       });
       if(slides.length>1){
-        let timer=setInterval(()=>showSlide(activeIndex+1),6500);
-        carousel.addEventListener("mouseenter",()=>clearInterval(timer));
-        carousel.addEventListener("mouseleave",()=>{clearInterval(timer);timer=setInterval(()=>showSlide(activeIndex+1),6500)});
+        if(window.homeHeroTimer)clearInterval(window.homeHeroTimer);
+        window.homeHeroTimer=setInterval(()=>showSlide(activeIndex+1),6000);
       }
     }
     const sections=[["Popular Movies",popular,"popular"],["Top Rated",topRated,"rating"],["New Releases",newReleases,"year"]];
@@ -245,7 +248,9 @@ function heroHTML(movies) {
   if (list.length === 1) return heroSlideHTML(list[0]);
   return `<div class="hero-carousel" data-hero-carousel>
     <div class="hero-carousel-slides">${list.map((movie, index) => heroSlideHTML(movie, index === 0)).join("")}</div>
-    <div class="hero-carousel-dots" aria-label="Featured movies">${list.map((movie, index) => `<button class="hero-dot${index === 0 ? " active" : ""}" type="button" data-hero-index="${index}" aria-label="Show ${esc(movie.title_en)}"></button>`).join("")}</div>
+    <button class="hero-nav hero-nav-prev" type="button" data-hero-nav="-1" aria-label="წინა ბანერი">‹</button>
+    <button class="hero-nav hero-nav-next" type="button" data-hero-nav="1" aria-label="შემდეგი ბანერი">›</button>
+    <div class="hero-carousel-dots" aria-label="მთავარი ბანერები">${list.map((movie, index) => `<button class="hero-dot${index === 0 ? " active" : ""}" type="button" data-hero-index="${index}" aria-label="${index+1} ბანერი: ${esc(movie.title_en)}"></button>`).join("")}</div>
   </div>`;
 }
 function heroSlideHTML(m, active = true) {
