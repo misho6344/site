@@ -752,7 +752,10 @@ async function showMovie(id, autoplay) {
             <div><span>Director</span><b>${esc(m.director || "—")}</b></div>
             <div><span>Cast</span><b>${esc(m.actors || "—")}</b></div>
           </div>
-          <p class="desc">${esc(m.description || "No description available.")}</p>
+          <div class="description-block">
+            <p id="movieDescription" class="desc is-collapsed">${esc(m.description || "No description available.")}</p>
+            <button id="descriptionToggle" class="description-toggle" type="button" aria-controls="movieDescription" aria-expanded="false" hidden>Read more</button>
+          </div>
           ${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length ? `<div class="rights-credit"><strong>Content credits</strong><p>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).map(esc).join("<br>")}</p>${m.video_license_url ? `<a href="${esc(safeUrl(m.video_license_url))}" target="_blank" rel="noopener noreferrer">Video licence</a>` : ""}</div>` : ""}
           ${safeUrl(m.video_url) ? `<button class="btn solid" id="watchBtn" type="button">${m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie"}</button>` : ""}
 
@@ -771,6 +774,24 @@ async function showMovie(id, autoplay) {
         </form>
         <div id="commentsList"></div>
       </section>`;
+    const movieDescription = $("movieDescription");
+    const descriptionToggle = $("descriptionToggle");
+    if (movieDescription && descriptionToggle) {
+      const syncDescriptionToggle = () => {
+        const isCollapsed = movieDescription.classList.contains("is-collapsed");
+        descriptionToggle.hidden = isCollapsed
+          ? movieDescription.scrollHeight <= movieDescription.clientHeight + 2
+          : false;
+      };
+      syncDescriptionToggle();
+      descriptionToggle.addEventListener("click", () => {
+        const expanded = movieDescription.classList.toggle("is-expanded");
+        movieDescription.classList.toggle("is-collapsed", !expanded);
+        descriptionToggle.setAttribute("aria-expanded", String(expanded));
+        descriptionToggle.textContent = expanded ? "Show less" : "Read more";
+        syncDescriptionToggle();
+      });
+    }
     const seoFallback=$("seoMovieContent");if(seoFallback)seoFallback.remove();const routeFallback=$("seoRouteFallback");if(routeFallback)routeFallback.remove();
     $("commentSort").value = commentSort;
     const play = () => mountPlayer({ userInitiated: true });
