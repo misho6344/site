@@ -2440,3 +2440,146 @@ body.player-open .chat-panel{
   .rights-credit-toggle{min-height:26px;font-size:10px}
   .rights-credit-content{padding:7px 9px;font-size:10px}
 }
+
+/* NoAdFrame visual identity refresh: softer carrot orange + ambient cinema glow. */
+:root {
+  --orange: #F2A65A;
+  --orange-soft: #FFC078;
+  --orange-ink: #21160D;
+}
+
+/* A single button language across desktop, portrait and landscape. */
+.btn {
+  border-radius: 999px;
+  transition:
+    transform .18s ease,
+    color .18s ease,
+    background-color .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease;
+}
+.btn.solid {
+  background: var(--orange);
+  color: var(--orange-ink);
+  border-color: rgba(242,166,90,.82);
+  box-shadow: 0 3px 12px rgba(242,166,90,.12);
+}
+.btn.solid:hover {
+  background: var(--orange-soft);
+  border-color: var(--orange-soft);
+  color: #1C130C;
+  box-shadow: 0 6px 18px rgba(242,166,90,.2);
+}
+.btn.ghost {
+  border-color: rgba(255,255,255,.17);
+  background: rgba(255,255,255,.025);
+  color: rgba(255,255,255,.86);
+}
+.btn.ghost:hover {
+  border-color: rgba(242,166,90,.65);
+  background: rgba(242,166,90,.09);
+  color: var(--orange-soft);
+}
+.btn.danger:hover {
+  border-color: #ff7777;
+  color: #ff7777;
+}
+
+/* Shared navigation states and compact touch controls. */
+.main-nav a {
+  border-radius: 999px;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease;
+}
+.main-nav a:hover {
+  background: rgba(255,255,255,.065);
+  color: #fff;
+}
+.main-nav a.active,
+.main-nav a[aria-current="page"] {
+  background: var(--orange);
+  color: var(--orange-ink);
+  border-color: rgba(242,166,90,.78);
+  box-shadow: 0 3px 12px rgba(242,166,90,.13);
+}
+.searchbox:focus-within {
+  border-color: rgba(242,166,90,.72);
+  box-shadow: 0 0 0 3px rgba(242,166,90,.08);
+}
+:focus-visible {
+  outline-color: var(--orange-soft);
+}
+.hero-tag {
+  border-color: rgba(242,166,90,.5);
+  color: var(--orange-soft);
+}
+.hero-dot.active {
+  background: var(--orange);
+}
+.page-number.active {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: var(--orange-ink);
+}
+
+/* Replace the rain animation with a calm, playful abstract cinema backdrop.
+   All effects are CSS-only, lightweight and do not block page interaction. */
+.site-bg {
+  background:
+    radial-gradient(ellipse at 12% 16%, rgba(112,82,177,.17), transparent 38%),
+    radial-gradient(ellipse at 88% 30%, rgba(242,166,90,.13), transparent 34%),
+    radial-gradient(ellipse at 54% 100%, rgba(69,116,166,.12), transparent 42%),
+    linear-gradient(145deg, #0a0a12 0%, #111019 48%, #090a0d 100%) !important;
+}
+.site-bg:before {
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(7,8,15,.26), rgba(8,8,8,.45) 56%, rgba(8,8,8,.66)),
+    radial-gradient(ellipse at 16% 24%, rgba(150,108,220,.08), transparent 38%),
+    radial-gradient(ellipse at 84% 26%, rgba(255,180,105,.07), transparent 36%) !important;
+}
+.site-bg:after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: -18%;
+  pointer-events: none;
+  opacity: .78;
+  background:
+    radial-gradient(ellipse at 20% 28%, rgba(137,100,211,.16) 0%, transparent 23%),
+    radial-gradient(ellipse at 78% 34%, rgba(242,166,90,.12) 0%, transparent 21%),
+    radial-gradient(ellipse at 55% 82%, rgba(75,142,185,.10) 0%, transparent 25%),
+    radial-gradient(ellipse at 8% 78%, rgba(242,166,90,.08) 0%, transparent 18%);
+  filter: blur(38px);
+  transform: translate3d(0,0,0);
+  animation: cinema-ambient-drift 32s ease-in-out infinite alternate;
+}
+.rain {
+  display: none !important;
+  animation: none !important;
+}
+@keyframes cinema-ambient-drift {
+  0% { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+  50% { transform: translate3d(1.5%, 1%, 0) scale(1.035); }
+  100% { transform: translate3d(-.5%, 1.5%, 0) scale(1.015); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-bg:after { animation: none !important; }
+}
+
+/* The same soft orange treatment applies to header controls in both orientations. */
+@media (max-width:700px) {
+  .main-nav a.active,
+  .main-nav a[aria-current="page"] {
+    background: var(--orange) !important;
+    color: var(--orange-ink) !important;
+    border-color: rgba(242,166,90,.78) !important;
+    box-shadow: 0 2px 9px rgba(242,166,90,.12);
+  }
+  .btn.solid,
+  #loginBtn.solid,
+  #registerBtn.solid {
+    background: var(--orange);
+    color: var(--orange-ink);
+    border-color: rgba(242,166,90,.82);
+  }
+}
