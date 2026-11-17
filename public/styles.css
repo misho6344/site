@@ -1059,19 +1059,19 @@ body.player-open .chat-panel{
   #loginBtn,#profileLink{display:flex!important}
   #guestActions[hidden],#userActions[hidden]{display:none!important}
 }
-@media(max-width:700px) and (orientation:landscape) and (max-height:560px) and (pointer:coarse){
+@media(max-width:700px) and (orientation:landscape) and (max-height:600px) and (pointer:coarse){
   .topbar{
     position:sticky!important;
     top:0;
     z-index:60;
     display:grid!important;
-    grid-template-columns:minmax(88px,.95fr) minmax(0,2.8fr) minmax(100px,1.15fr);
+    grid-template-columns:minmax(92px,1fr) minmax(0,2.7fr) minmax(104px,1.15fr);
     grid-template-areas:"brand nav actions";
     align-items:center;
-    gap:4px 8px;
+    gap:4px 9px;
     width:100%;
     min-height:0;
-    padding:4px 10px;
+    padding:5px 12px;
   }
   .brand{
     grid-area:brand;
@@ -1081,14 +1081,14 @@ body.player-open .chat-panel{
     align-items:center;
     gap:4px;
   }
-  .brand-logo{width:22px;height:22px;flex:0 0 22px}
+  .brand-logo{width:23px;height:23px;flex:0 0 23px}
   .brand-text{
     display:block;
     min-width:0;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
-    font-size:clamp(11px,1.8vw,14px);
+    font-size:clamp(12px,1.9vw,15px);
     line-height:1;
   }
   .main-nav{
@@ -1107,12 +1107,12 @@ body.player-open .chat-panel{
     display:flex!important;
     flex:1 1 0;
     min-width:0;
-    min-height:30px;
+    min-height:32px;
     align-items:center;
     justify-content:center;
-    padding:4px 3px;
+    padding:5px 3px;
     border-radius:7px;
-    font-size:clamp(9px,1.6vw,11px);
+    font-size:clamp(9.5px,1.65vw,11.5px);
     line-height:1;
     white-space:nowrap;
   }
