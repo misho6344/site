@@ -291,3 +291,22 @@ The copyright policy page is informational and is not legal advice. The operator
 - CORS
 - express-rate-limit
 - OpenAI Node.js SDK
+
+
+## Google Search და SEO
+
+საიტის საძიებო სისტემებისთვის განკუთვნილი მარშრუტები:
+
+- `/robots.txt` — ავტომატურად აძლევს crawlers-ს წვდომას საჯარო გვერდებზე, კრძალავს `/api/`-ს და მიუთითებს აქტიურ Sitemap მისამართს `PUBLIC_SITE_URL`-ის მიხედვით.
+- `/sitemap.xml` — შეიცავს მთავარ, Movies, Genres, About და თითოეული ფილმის კანონიკურ URL-ს. 45,000-ზე მეტი ფილმის შემთხვევაში Sitemap ავტომატურად იყოფა ინდექსად და ნაწილებად.
+- `/movies/:id/:slug` — ფილმის ცალკეული SEO გვერდი, კანონიკური URL-ით, უნიკალური სათაურით/აღწერით, Open Graph/Twitter მეტამონაცემებით და Schema.org Movie + BreadcrumbList სტრუქტურირებული მონაცემებით.
+
+Google Search Console-ის დაყენება:
+
+1. დაამატეთ URL-prefix property: `https://noadframe.onrender.com/`.
+2. `public/index.html`-ში უკვე არის Google site-verification meta tag; Search Console-ში უნდა დაემთხვეს იმავე property-ის მიერ გაცემულ token-ს.
+3. საკუთრების დადასტურების შემდეგ გახსენით Search Console → **Sitemaps** და წარადგინეთ `https://noadframe.onrender.com/sitemap.xml`.
+4. URL Inspection-ით ცალ-ცალკე შეამოწმეთ მთავარი გვერდი, `/movies` და მნიშვნელოვანი ფილმების კანონიკური მისამართები. საჭიროების შემთხვევაში გამოიყენეთ **Request indexing**.
+
+Sitemap-ის გაგზავნა და ინდექსაციის მოთხოვნა Google-ს crawl/index განხილვას სთხოვს; ეს ინდექსაციაში მოხვედრის გარანტია არ არის. Search Console-ში წარდგენა და URL Inspection მოითხოვს იმ Google ანგარიშით შესვლას, რომელსაც ამ property-ზე მფლობელის უფლება აქვს.
+
