@@ -2583,3 +2583,58 @@ body.player-open .chat-panel{
     border-color: rgba(130,191,160,.82);
   }
 }
+
+
+/* Final background visibility correction: keep the existing ambient palette, but make its layers distinct and visible. */
+/* Keep the fixed backdrop in its own predictable layer above the page canvas. */
+body {
+  position: relative;
+  isolation: isolate;
+  background: transparent !important;
+}
+.site-bg {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(ellipse 58% 54% at 10% 18%, rgba(119, 83, 190, .34) 0%, rgba(119, 83, 190, .16) 34%, transparent 72%),
+    radial-gradient(ellipse 50% 56% at 91% 22%, rgba(104, 175, 139, .28) 0%, rgba(104, 175, 139, .12) 38%, transparent 74%),
+    radial-gradient(ellipse 62% 46% at 54% 100%, rgba(75, 130, 190, .25) 0%, rgba(75, 130, 190, .11) 38%, transparent 76%),
+    radial-gradient(ellipse 30% 34% at 80% 76%, rgba(130, 191, 160, .14) 0%, transparent 76%),
+    linear-gradient(140deg, #0c0b15 0%, #11101b 48%, #090d12 100%) !important;
+}
+.site-bg:before {
+  z-index: 0 !important;
+  opacity: 1 !important;
+  background:
+    linear-gradient(180deg, rgba(5, 6, 12, .12) 0%, rgba(7, 8, 13, .22) 54%, rgba(8, 8, 8, .42) 100%),
+    radial-gradient(ellipse at 18% 24%, rgba(142, 105, 212, .10), transparent 42%),
+    radial-gradient(ellipse at 84% 30%, rgba(130, 191, 160, .09), transparent 42%) !important;
+}
+.site-bg:after {
+  z-index: 1 !important;
+  inset: -12% !important;
+  opacity: 1 !important;
+  background:
+    radial-gradient(ellipse 35% 30% at 17% 25%, rgba(147, 105, 218, .24) 0%, rgba(147, 105, 218, .09) 46%, transparent 78%),
+    radial-gradient(ellipse 34% 32% at 83% 27%, rgba(130, 191, 160, .22) 0%, rgba(130, 191, 160, .08) 48%, transparent 80%),
+    radial-gradient(ellipse 42% 30% at 54% 83%, rgba(75, 145, 198, .20) 0%, rgba(75, 145, 198, .07) 48%, transparent 80%),
+    radial-gradient(ellipse 24% 26% at 8% 78%, rgba(130, 191, 160, .13) 0%, transparent 78%) !important;
+  filter: blur(25px) saturate(1.28) !important;
+  mix-blend-mode: screen;
+  animation: cinema-ambient-drift 25s ease-in-out infinite alternate !important;
+}
+/* The former rain layer must not cover the ambient artwork. */
+.site-bg .rain { display: none !important; opacity: 0 !important; }
+/* Keep page content above the background without adding an opaque page surface. */
+.topbar, #app, body > footer { position: relative; z-index: 1; }
+@media (max-width: 700px) {
+  .site-bg:after { filter: blur(21px) saturate(1.3) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-bg:after { animation: none !important; }
+}
