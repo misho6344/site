@@ -311,7 +311,7 @@ app.get("/api/site-banner", wrap(async (_req,res)=>{
   const row=rows[0];
   const version=row?Number(row.version||Date.now()):null;
   const imageUrl=!row?"":(row.image_url|| (row.has_image?SEO_BASE+"/api/site-banner/image?v="+version:""));
-  res.set("Cache-Control","public, max-age=30, stale-while-revalidate=120");
+  res.set({"Cache-Control":"no-store, no-cache, must-revalidate","Pragma":"no-cache","Vary":"Accept-Encoding"});
   res.json({active:Boolean(imageUrl),imageUrl,mode:row?(row.image_url?"url":(row.has_image?"upload":"none")):"none",updatedAt:version});
 }));
 app.get("/api/site-banner/image", wrap(async (_req,res)=>{
