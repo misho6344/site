@@ -859,6 +859,10 @@ async function showProfile() {
     view.innerHTML = `
       <div class="profile-card"><div class="avatar-big">${esc(u.username.charAt(0).toUpperCase())}</div>
         <div><h1>${esc(u.username)}</h1><p>${esc(u.email)}</p><p>Member since ${new Date(u.created_at).toLocaleDateString()} · ${data.stats.comments} comment${data.stats.comments === 1 ? "" : "s"}${data.isAdmin ? " · Administrator" : ""}</p></div></div>
+      ${data.isAdmin ? `<div class="panel admin-panel-shortcut"><h2>Administration</h2>
+        <p>Manage the NoAdFrame platform from the administrator dashboard.</p>
+        <a class="btn solid" href="https://noadframe-admin-panel.onrender.com/" target="_blank" rel="noopener noreferrer">Open Admin Panel <span aria-hidden="true">↗</span></a>
+      </div>` : ""}
       <div class="panel"><h2>Change password</h2>
         <form class="form" id="pwForm"><label>Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label>
         <label>New password<input type="password" name="newPassword" autocomplete="new-password" minlength="8" maxlength="72" required></label>
