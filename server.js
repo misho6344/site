@@ -307,10 +307,10 @@ app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
 }));
 
 app.get("/api/site-banners",wrap(async(_req,res)=>{
-  const [rows]=await pool.query("SELECT b.id,b.image_url,b.image_data IS NOT NULL AS has_image,b.sort_order,m.id AS movie_id,m.imdb_id,m.title_en,m.title_ka,m.release_year,m.imdb_rating,m.genre,m.director,m.actors,m.poster_url,m.backdrop_url,m.video_url,m.video_type,m.description,m.video_views,UNIX_TIMESTAMP(b.updated_at)*1000 AS version FROM site_banners b JOIN movies m ON m.id=b.movie_id WHERE b.is_active=1 ORDER BY b.sort_order ASC,b.id ASC LIMIT 12");
+  const [rows]=await pool.query("SELECT b.id AS banner_id,b.image_url,b.image_data IS NOT NULL AS has_image,b.sort_order,m.id AS movie_id,m.imdb_id,m.title_en,m.title_ka,m.release_year,m.imdb_rating,m.genre,m.director,m.actors,m.poster_url,m.backdrop_url,m.video_url,m.video_type,m.description,m.video_views,UNIX_TIMESTAMP(b.updated_at)*1000 AS version FROM site_banners b JOIN movies m ON m.id=b.movie_id WHERE b.is_active=1 ORDER BY b.sort_order ASC,b.id ASC LIMIT 12");
   const banners=rows.map(row=>{
     const version=Number(row.version||Date.now());
-    return {...row,id:Number(row.movie_id),banner_id:Number(row.id),banner_image_url:row.image_url||(row.has_image?SEO_BASE+"/api/site-banners/"+Number(row.banner_id)+"/image?v="+version:""),sort_order:Number(row.sort_order)||0};
+    return {...row,id:Number(row.movie_id),banner_id:Number(row.banner_id),banner_image_url:row.image_url||(row.has_image?SEO_BASE+"/api/site-banners/"+Number(row.banner_id)+"/image?v="+version:""),sort_order:Number(row.sort_order)||0};
   }).filter(row=>row.banner_image_url);
   res.set({"Cache-Control":"no-store, no-cache, must-revalidate","Pragma":"no-cache"});
   res.json({banners});
@@ -318,7 +318,7 @@ app.get("/api/site-banners",wrap(async(_req,res)=>{
 app.get("/api/site-banners/:id/image",wrap(async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)||id<=0)return res.status(404).end();
-  const [rows]=await pool.query("SELECT image_data,mime_type FROM site_banners WHERE id=? AND is_active=1 LIMIT 1",[id]);
+  const [rows]=await pool.query("SELECT image_data,mime_type FROM site_banners WHERE id=? LIMIT 1",[id]);
   if(!rows.length||!rows[0].image_data)return res.status(404).end();
   res.set({"Content-Type":rows[0].mime_type||"application/octet-stream","Cache-Control":"public, max-age=31536000, immutable","X-Content-Type-Options":"nosniff"});
   res.end(rows[0].image_data);
