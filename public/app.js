@@ -455,6 +455,7 @@ function embedFor(url) {
 
 const archiveVideoRequests = new Map();
 const archiveVideoUrls = new Map();
+const archiveVideoFallbacks = new Map();
 const archiveVideoErrors = new Map();
 
 function isMobilePlayer() {
@@ -469,8 +470,10 @@ function resolveArchiveVideo(identifier) {
     const request = api(`/api/archive-video?identifier=${encodeURIComponent(identifier)}`, { signal: controller.signal })
       .then(data => {
         const url = safeUrl(data.videoUrl);
+        const fallback = safeUrl(data.archiveEmbedUrl);
         if (url) {
           archiveVideoUrls.set(identifier, url);
+          if (fallback) archiveVideoFallbacks.set(identifier, fallback);
           archiveVideoErrors.delete(identifier);
         } else {
           archiveVideoErrors.set(identifier, "The source did not provide a playable video file.");
@@ -492,6 +495,13 @@ function resolveArchiveVideo(identifier) {
   return archiveVideoRequests.get(identifier);
 }
 
+function showArchiveEmbedFallback(box, movie, identifier) {
+  const src = archiveVideoFallbacks.get(identifier) || `https://archive.org/embed/${encodeURIComponent(identifier)}`;
+  box.innerHTML = `<iframe class="player-media archive-embed-fallback" loading="eager" src="${esc(src)}" title="${esc(movie.title_en || "Archive.org video")}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen webkitallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  box.querySelector("iframe")?.addEventListener("error", () => {
+    showArchiveVideoError(box, movie, identifier, "Archive.org-ის ჩაშენებული პლეერიც ვერ ჩაიტვირთა. სცადე მოგვიანებით ან სხვა წყარო.");
+  }, { once: true });
+}
 function showArchiveVideoError(box, movie, identifier, message) {
   const sourceUrl = `https://archive.org/details/${encodeURIComponent(identifier || "")}`;
   box.innerHTML = `<div class="player-note player-error">
@@ -587,12 +597,17 @@ function startVideoPlayback(box, video) {
     if (playback && typeof playback.catch === "function") {
       playback.catch(error => {
         if (error?.name === "NotSupportedError" || video.error) {
-          showArchiveVideoError(
-            box,
-            currentMovie || { title_en: "Video" },
-            video.dataset.archiveId || "",
-            "ტელეფონის ბრაუზერი ამ ვიდეოფორმატს ვერ უკრავს. წყაროში უნდა არსებობდეს H.264 ვერსია."
-          );
+          const archiveId = video.dataset.archiveId || "";
+          if (archiveId && archiveVideoFallbacks.has(archiveId)) {
+            showArchiveEmbedFallback(box, currentMovie || { title_en: "Video" }, archiveId);
+          } else {
+            showArchiveVideoError(
+              box,
+              currentMovie || { title_en: "Video" },
+              archiveId,
+              "ტელეფონის ბრაუზერი ამ ვიდეოფორმატს ვერ უკრავს."
+            );
+          }
           return;
         }
         showPlayerStartControl(box, video);
@@ -622,12 +637,16 @@ function renderPlayerSource(box, movie, source, { userInitiated = false, delayed
     if (source.archiveId) {
       video.addEventListener("error", () => {
         if (!box.contains(video)) return;
-        showArchiveVideoError(
-          box,
-          movie,
-          source.archiveId,
-          "ვიდეოფაილი ვერ ჩაიტვირთა. შესაძლოა მისი კოდეკი ტელეფონის ბრაუზერს არ უჭერდეს მხარს."
-        );
+        if (archiveVideoFallbacks.has(source.archiveId)) {
+          showArchiveEmbedFallback(box, movie, source.archiveId);
+        } else {
+          showArchiveVideoError(
+            box,
+            movie,
+            source.archiveId,
+            "ვიდეოფაილი ვერ ჩაიტვირთა. შესაძლოა მისი კოდეკი ტელეფონის ბრაუზერს არ უჭერდეს მხარს."
+          );
+        }
       }, { once: true });
     }
     const resumeAt = playbackPositions.get(String(movie.id));
