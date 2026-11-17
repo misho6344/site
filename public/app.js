@@ -198,7 +198,7 @@ async function showHome() {
     const banners = featured.length ? featured : [all.find(m => safeUrl(m.backdrop_url)) || data.topRated[0] || all[0]].filter(Boolean);
     $("hero").innerHTML = banners.length ? heroHTML(banners) : heroEmptyHTML();
     if(bannerConfig.active&&safeUrl(bannerConfig.imageUrl)){
-      const hero=$("#hero");
+      const hero=$("hero");
       if(banners.length){
         hero.innerHTML=heroSlideHTML(banners[0]);
       }else{
