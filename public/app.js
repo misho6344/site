@@ -41,7 +41,7 @@ async function api(url, options = {}) {
   if (csrf && !["GET", "HEAD", "OPTIONS"].includes(String(options.method || "GET").toUpperCase())) headers["X-CSRF-Token"] = decodeURIComponent(csrf.slice("noadframe_csrf=".length));
   let response;
   try {
-    response = await fetch(url, { ...options, headers, credentials: "same-origin" });
+    response = await fetch(url, { cache: options.cache || "no-store", ...options, headers, credentials: "same-origin" });
   } catch (error) {
     reportBrowserError("network", error);
     throw error;
@@ -186,7 +186,7 @@ async function showHome() {
   try {
     const [data,bannerConfig] = await Promise.all([
       api("/api/movies/categories"),
-      api("/api/site-banner").catch(()=>({active:false,imageUrl:""}))
+      api("/api/site-banner",{cache:"no-store"}).catch(()=>({active:false,imageUrl:""}))
     ]);
     const all = [...(data.featured || []), ...data.topRated, ...data.newReleases, ...data.popular];
     rememberMovies(all);
@@ -198,12 +198,28 @@ async function showHome() {
     const banners = featured.length ? featured : [all.find(m => safeUrl(m.backdrop_url)) || data.topRated[0] || all[0]].filter(Boolean);
     $("hero").innerHTML = banners.length ? heroHTML(banners) : heroEmptyHTML();
     if(bannerConfig.active&&safeUrl(bannerConfig.imageUrl)){
+      const hero=$("#hero");
       if(banners.length){
-        $("hero").innerHTML=heroSlideHTML(banners[0]);
-        const heroImage=$("hero").querySelector(".hero-bg");
-        if(heroImage)heroImage.src=bannerConfig.imageUrl;
+        hero.innerHTML=heroSlideHTML(banners[0]);
       }else{
-        $("hero").innerHTML='<section class="hero hero-slide active"><img class="hero-bg" src="'+esc(bannerConfig.imageUrl)+'" alt=""><div class="hero-copy"><span class="hero-tag">Welcome</span><h1>Watch. Enjoy.<br><span class="grad">No Ads.</span></h1><p>Discover movies on NoAdFrame.</p><div class="hero-actions"><a class="btn solid" href="#/movies">Browse Movies</a></div></div></section>';
+        hero.innerHTML=heroEmptyHTML();
+      }
+      const slide=hero.querySelector(".hero-slide")||hero.querySelector(".hero");
+      if(slide){
+        let heroImage=slide.querySelector(".hero-bg");
+        if(!heroImage){
+          heroImage=document.createElement("img");
+          heroImage.className="hero-bg";
+          heroImage.alt="";
+          heroImage.decoding="async";
+          slide.prepend(heroImage);
+        }
+        heroImage.src=bannerConfig.imageUrl;
+        heroImage.dataset.customBanner="true";
+        heroImage.addEventListener("error",()=>{
+          console.error("Homepage banner image could not be loaded.");
+          heroImage.remove();
+        },{once:true});
       }
     }
     const heroCarousel = $("hero").querySelector("[data-hero-carousel]");
