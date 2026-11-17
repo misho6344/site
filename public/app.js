@@ -756,7 +756,7 @@ async function showMovie(id, autoplay) {
             <p id="movieDescription" class="desc is-collapsed">${esc(m.description || "No description available.")}</p>
             <button id="descriptionToggle" class="description-toggle" type="button" aria-controls="movieDescription" aria-expanded="false" hidden>Read more</button>
           </div>
-          ${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length ? `<div class="rights-credit"><strong>Content credits</strong><p>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).map(esc).join("<br>")}</p>${m.video_license_url ? `<a href="${esc(safeUrl(m.video_license_url))}" target="_blank" rel="noopener noreferrer">Video licence</a>` : ""}</div>` : ""}
+          ${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length || safeUrl(m.video_license_url) ? `<div class="rights-credit"><button class="rights-credit-toggle" id="creditsToggle" type="button" aria-controls="movieCredits" aria-expanded="false"><span>Content credits</span><span class="credits-indicator" aria-hidden="true">+</span></button><div class="rights-credit-content" id="movieCredits" hidden>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).length ? `<p>${[m.poster_attribution,m.backdrop_attribution,m.video_attribution].filter(Boolean).map(esc).join("<br>")}</p>` : ""}${safeUrl(m.video_license_url) ? `<a href="${esc(safeUrl(m.video_license_url))}" target="_blank" rel="noopener noreferrer">Video licence</a>` : ""}</div></div>` : ""}
           ${safeUrl(m.video_url) ? `<button class="btn solid" id="watchBtn" type="button">${m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie"}</button>` : ""}
 
         </div>
@@ -790,6 +790,17 @@ async function showMovie(id, autoplay) {
         descriptionToggle.setAttribute("aria-expanded", String(expanded));
         descriptionToggle.textContent = expanded ? "Show less" : "Read more";
         syncDescriptionToggle();
+      });
+    }
+    const creditsToggle = $("creditsToggle");
+    const movieCredits = $("movieCredits");
+    if (creditsToggle && movieCredits) {
+      creditsToggle.addEventListener("click", () => {
+        const expanded = creditsToggle.getAttribute("aria-expanded") !== "true";
+        creditsToggle.setAttribute("aria-expanded", String(expanded));
+        movieCredits.hidden = !expanded;
+        const indicator = creditsToggle.querySelector(".credits-indicator");
+        if (indicator) indicator.textContent = expanded ? "−" : "+";
       });
     }
     const seoFallback=$("seoMovieContent");if(seoFallback)seoFallback.remove();const routeFallback=$("seoRouteFallback");if(routeFallback)routeFallback.remove();
