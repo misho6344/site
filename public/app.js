@@ -182,61 +182,49 @@ document.addEventListener("error", (e) => {
 
 /* ---------- home ---------- */
 async function showHome() {
-  $("hero").innerHTML = ""; $("homeRows").innerHTML = "";
+  const heroRoot=$("hero"),rowsRoot=$("homeRows");
+  if(!heroRoot||!rowsRoot)return;
+  heroRoot.innerHTML="";
+  rowsRoot.innerHTML="";
   try {
-    const [data,bannerConfig] = await Promise.all([
+    const [data,bannerData] = await Promise.all([
       api("/api/movies/categories"),
-      api("/api/site-banner",{cache:"no-store"}).catch(()=>({active:false,imageUrl:""}))
+      api("/api/site-banners",{cache:"no-store"}).catch(()=>({banners:[]}))
     ]);
-    const all = [...(data.featured || []), ...data.topRated, ...data.newReleases, ...data.popular];
+    const popular=Array.isArray(data.popular)?data.popular:[];
+    const topRated=Array.isArray(data.topRated)?data.topRated:[];
+    const newReleases=Array.isArray(data.newReleases)?data.newReleases:[];
+    const featured=Array.isArray(data.featured)?data.featured:[];
+    const all=[...featured,...topRated,...newReleases,...popular];
     rememberMovies(all);
-    warmArchiveVideoSources(all, 3);
-    const featuredPool = [...(data.featured || []), ...all];
-    const mickey = featuredPool.find(m => /mickey\s*17/i.test(m.title_en || ""));
-    const holdovers = featuredPool.find(m => /the holdovers/i.test(m.title_en || ""));
-    const featured = [mickey, holdovers].filter((movie, index, list) => movie && list.findIndex(x => x && x.id === movie.id) === index);
-    const banners = featured.length ? featured : [all.find(m => safeUrl(m.backdrop_url)) || data.topRated[0] || all[0]].filter(Boolean);
-    $("hero").innerHTML = banners.length ? heroHTML(banners) : heroEmptyHTML();
-    if(bannerConfig.active&&safeUrl(bannerConfig.imageUrl)){
-      const hero=$("hero");
-      if(banners.length){
-        hero.innerHTML=heroSlideHTML(banners[0]);
-      }else{
-        hero.innerHTML=heroEmptyHTML();
-      }
-      const slide=hero.querySelector(".hero-slide")||hero.querySelector(".hero");
-      if(slide){
-        let heroImage=slide.querySelector(".hero-bg");
-        if(!heroImage){
-          heroImage=document.createElement("img");
-          heroImage.className="hero-bg";
-          heroImage.alt="";
-          heroImage.decoding="async";
-          slide.prepend(heroImage);
-        }
-        heroImage.src=bannerConfig.imageUrl;
-        heroImage.dataset.customBanner="true";
-        heroImage.addEventListener("error",()=>{
-          console.error("Homepage banner image could not be loaded.");
-          heroImage.remove();
-        },{once:true});
-      }
+    warmArchiveVideoSources(all,3);
+    const configured=Array.isArray(bannerData.banners)?bannerData.banners:[];
+    const customBanners=configured.filter(item=>safeUrl(item.banner_image_url));
+    if(customBanners.length){
+      heroRoot.innerHTML=heroHTML(customBanners);
+    }else{
+      const featuredPool=[...featured,...all];
+      const mickey=featuredPool.find(m=>/mickey\s*17/i.test(m.title_en||""));
+      const holdovers=featuredPool.find(m=>/the holdovers/i.test(m.title_en||""));
+      const defaults=[mickey,holdovers].filter((movie,index,list)=>movie&&list.findIndex(x=>x&&x.id===movie.id)===index);
+      const fallback=defaults.length?defaults:[all.find(m=>safeUrl(m.backdrop_url))||topRated[0]||all[0]].filter(Boolean);
+      heroRoot.innerHTML=fallback.length?heroHTML(fallback):heroEmptyHTML();
     }
-    const heroCarousel = $("hero").querySelector("[data-hero-carousel]");
-    if (heroCarousel) heroCarousel.addEventListener("click", (event) => {
-      const dot = event.target.closest("[data-hero-index]");
-      if (!dot) return;
-      const index = Number(dot.dataset.heroIndex);
-      heroCarousel.querySelectorAll(".hero-slide").forEach((slide, i) => slide.classList.toggle("active", i === index));
-      heroCarousel.querySelectorAll(".hero-dot").forEach((button, i) => button.classList.toggle("active", i === index));
+    const carousel=heroRoot.querySelector("[data-hero-carousel]");
+    if(carousel)carousel.addEventListener("click",event=>{
+      const dot=event.target.closest("[data-hero-index]");
+      if(!dot)return;
+      const index=Number(dot.dataset.heroIndex);
+      carousel.querySelectorAll(".hero-slide").forEach((slide,i)=>slide.classList.toggle("active",i===index));
+      carousel.querySelectorAll(".hero-dot").forEach((button,i)=>button.classList.toggle("active",i===index));
     });
-    const rows = [["Popular Movies", data.popular, "popular"], ["Top Rated", data.topRated, "rating"], ["New Releases", data.newReleases, "year"]];
-    $("homeRows").innerHTML = rows.filter(r => r[1].length).map(([title, list, sort]) => `
+    const sections=[["Popular Movies",popular,"popular"],["Top Rated",topRated,"rating"],["New Releases",newReleases,"year"]];
+    rowsRoot.innerHTML=sections.filter(([,list])=>list.length).map(([title,list,sort])=>`
       <section class="row"><div class="row-head"><h2>${title}</h2><a href="#/movies" data-sort="${sort}">See all</a></div>
       <div class="row-track">${list.map(cardHTML).join("")}</div></section>`).join("");
-  } catch (error) {
-    $("hero").innerHTML = heroEmptyHTML();
-    $("homeRows").innerHTML = `<div class="page"><div class="state">${esc(error.message)}</div></div>`;
+  } catch(error) {
+    heroRoot.innerHTML=heroEmptyHTML();
+    rowsRoot.innerHTML=`<div class="page"><div class="state">${esc(error.message)}</div></div>`;
   }
 }
 function heroHTML(movies) {
@@ -253,7 +241,7 @@ function heroSlideHTML(m, active = true) {
   const aiBanner = /mickey\s*17/i.test(title)
     ? "/assets/hero-mickey17-ai.jpg"
     : (/the holdovers/i.test(title) ? "/assets/hero-holdovers-ai.jpg" : "");
-  const bg = localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
+  const bg = safeUrl(m.banner_image_url) || localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
   const playable = !!safeUrl(m.video_url);
   const playHref = playable ? `${moviePath(m)}?play=1` : moviePath(m);
   const playLabel = playable ? (m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie") : "View Details";
