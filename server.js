@@ -479,12 +479,8 @@ app.get("/api/movies", catalogueLimiter, wrap(async (req, res) => {
   const safeOffset = (safePage - 1) * limit;
   const [rows] = await pool.query(
     `SELECT m.*,
-       CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
-       CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
-       CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
        m.video_url AS source_url,
-       CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description,
-       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' AND m.video_rights_basis IS NOT NULL THEN 1 ELSE 0 END AS has_video_source
+       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' THEN 1 ELSE 0 END AS has_video_source
      FROM movies m WHERE ${clause} ORDER BY ${SORTS[req.query.sort] || SORTS.newest} LIMIT ? OFFSET ?`,
     [...params, limit, safeOffset]
   );
@@ -505,19 +501,15 @@ app.get("/api/movies/categories", wrap(async (_req, res) => {
   try {
     const run = (order) => pool.query(
       `SELECT m.*,
-         CASE WHEN m.poster_rights_basis IS NOT NULL THEN m.poster_url ELSE NULL END AS poster_url,
-         CASE WHEN m.backdrop_rights_basis IS NOT NULL THEN m.backdrop_url ELSE NULL END AS backdrop_url,
-         CASE WHEN m.video_rights_basis IS NOT NULL THEN m.video_url ELSE NULL END AS video_url,
          m.video_url AS source_url,
-         CASE WHEN m.description_rights_basis IS NOT NULL THEN m.description ELSE NULL END AS description,
-         CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' AND m.video_rights_basis IS NOT NULL THEN 1 ELSE 0 END AS has_video_source
+       CASE WHEN m.video_url IS NOT NULL AND m.video_url <> '' THEN 1 ELSE 0 END AS has_video_source
        FROM movies m ORDER BY ${order} LIMIT 12`
     ).then(([rows]) => rows);
     const [popular, topRated, newReleases, [featuredRows]] = await Promise.all([
       run("m.views DESC, m.imdb_rating DESC"),
       run("m.imdb_rating DESC, m.views DESC"),
       run("m.release_year DESC, m.created_at DESC"),
-      pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description, CASE WHEN video_url IS NOT NULL AND video_url <> '' AND video_rights_basis IS NOT NULL THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE video_rights_basis IS NOT NULL OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
+      pool.query("SELECT m.*, video_url AS source_url, CASE WHEN video_url IS NOT NULL AND video_url <> '' THEN 1 ELSE 0 END AS has_video_source FROM movies m WHERE (video_url IS NOT NULL AND video_url <> '') OR imdb_id IN ('tt12299608', 'tt14849194', 'tt33175825') ORDER BY views DESC, imdb_rating DESC LIMIT 2")
     ]);
 
     const data = {
@@ -558,7 +550,7 @@ app.get("/api/genres", wrap(async (_req, res) => {
 
 app.get("/api/movies/:id", wrap(async (req, res) => {
   const id = requireNumericId(req);
-  const [rows] = await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN backdrop_rights_basis IS NOT NULL THEN backdrop_url ELSE NULL END AS backdrop_url, CASE WHEN video_rights_basis IS NOT NULL THEN video_url ELSE NULL END AS video_url, video_url AS source_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id = ?", [id]);
+  const [rows] = await pool.query("SELECT m.*, video_url AS source_url FROM movies m WHERE id = ?", [id]);
   if (!rows.length) throw httpError(404, "Movie not found.");
   res.json({ movie: suppressRetiredVideos(rows)[0] });
 }));
@@ -566,7 +558,7 @@ app.get("/api/movies/:id", wrap(async (req, res) => {
 app.post("/api/movies/:id/view", movieViewLimiter, wrap(async (req, res) => {
   const id = requireNumericId(req);
   const [result] = await pool.query(
-    "UPDATE movies SET video_views = video_views + 1 WHERE id = ? AND video_url IS NOT NULL AND video_url <> '' AND video_rights_basis IS NOT NULL",
+    "UPDATE movies SET video_views = video_views + 1 WHERE id = ? AND video_url IS NOT NULL AND video_url <> ''",
     [id]
   );
   if (!result.affectedRows) {
@@ -806,7 +798,7 @@ app.get("/sitemap.xml",wrap(async(_req,res)=>{
 }));
 app.get("/movies/:id/:slug?",wrap(async(req,res)=>{
  if(!/^[1-9][0-9]*$/.test(req.params.id))return res.status(404).type("html").send(seoShell({title:"Movie not found — NoAdFrame",description:"Movie not found.",path:"/",noindex:true}));
- const [rows]=await pool.query("SELECT m.*, CASE WHEN poster_rights_basis IS NOT NULL THEN poster_url ELSE NULL END AS poster_url, CASE WHEN description_rights_basis IS NOT NULL THEN description ELSE NULL END AS description FROM movies m WHERE id=?",[req.params.id]);
+ const [rows]=await pool.query("SELECT m.* FROM movies m WHERE id=?",[req.params.id]);
  if(!rows.length)return res.status(404).type("html").send(seoShell({title:"Movie not found — NoAdFrame",description:"Movie not found.",path:"/",noindex:true}));
  const m=suppressRetiredVideos(rows)[0], slug=seoSlug(m.title_en), route="/movies/"+m.id+"/"+slug;
  if(req.path!==route)return res.redirect(301,route);
