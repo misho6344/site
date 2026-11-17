@@ -245,10 +245,12 @@ function adminOnly(req, _res, next) {
 app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   const identifier = text(req.query.identifier, 180);
   if (!/^[a-zA-Z0-9._-]{1,180}$/.test(identifier)) throw httpError(400, "Invalid Archive.org identifier.");
+
   const cached = archiveVideoCache.get(identifier);
   if (cached && cached.expiresAt > Date.now()) {
     res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-    return res.json({ videoUrl: cached.videoUrl });
+    const { expiresAt, ...payload } = cached;
+    return res.json(payload);
   }
 
   const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`, {
@@ -256,56 +258,74 @@ app.get("/api/archive-video", archiveVideoLimiter, wrap(async (req, res) => {
   });
   if (!response.ok) throw httpError(502, "Archive.org metadata could not be loaded.");
   const metadata = await response.json();
-  const files = (metadata.files || []).filter(f => {
-    const name = String(f.name || "");
-    const format = String(f.format || "").toLowerCase();
-    return name && /\.(mp4|m4v|webm)$/i.test(name) &&
+
+  const files = (metadata.files || []).filter(file => {
+    const name = String(file.name || "");
+    const format = String(file.format || "").toLowerCase();
+    return name && /\.(mp4|m4v|webm|ogv)$/i.test(name) &&
       !/_thumb\.jpg$/i.test(name) && !/_sample\.mp4$/i.test(name) &&
       !/_preview\.mp4$/i.test(name) && !/metadata|thumbnail/.test(format);
   });
 
-  const playableFiles = files.filter(f => {
-    const name = String(f.name || "").toLowerCase();
-    const format = String(f.format || "").toLowerCase();
-    const codec = `${name} ${format}`;
-    const explicitlyH264 = /h\.?264|avc/.test(format);
-    const explicitlyHevc = /hevc|h\.?265|x265/.test(codec);
-    return !explicitlyHevc || explicitlyH264;
-  });
+  const isArchiveH264Derivative = file => {
+    const name = String(file.name || "").toLowerCase();
+    // Internet Archive's .ia.mp4 is its web-playback derivative. Its filename
+    // can inherit "x265/hevc" from the uploaded source, so inspect the suffix first.
+    return /\.ia\.mp4$/i.test(name) || /(?:^|[._-])512kb\.mp4$/i.test(name);
+  };
+  const codecInfo = file => {
+    const name = String(file.name || "").toLowerCase();
+    const format = String(file.format || "").toLowerCase();
+    const codec = name + " " + format;
+    const h264 = isArchiveH264Derivative(file) || /h\.?264|avc/.test(format);
+    const hevc = !h264 && /hevc|h\.?265|x265|hvc1|hev1/.test(codec);
+    return { h264, hevc };
+  };
+  const candidates = files.filter(file => !codecInfo(file).hevc);
 
-  if (!playableFiles.length) {
-    if (files.length) {
-      throw httpError(415, "This Archive.org item only exposes HEVC/H.265 video files. A phone-compatible H.264 version is not available.");
-    }
-    throw httpError(404, "No MP4, M4V, or WebM video file is available in this Archive.org item.");
+  if (!files.length) {
+    throw httpError(404, "No MP4, M4V, WebM, or OGV video file is available in this Archive.org item.");
   }
 
-  playableFiles.sort((a, b) => {
-    const score = f => {
-      const name = String(f.name || "").toLowerCase();
-      const format = String(f.format || "").toLowerCase();
-      let value = 0;
-      if (/ge[-_ ]dubbed|georgian|geo[-_ ]dub/.test(name)) value += 1000;
-      if (/h\.?264|avc/.test(format)) value += 800;
-      if (/(?:\.ia|_512kb)\.mp4$/i.test(name)) value += 500;
-      if (f.source === "derivative") value += 80;
-      if (name.endsWith(".mp4")) value += 30;
-      else if (name.endsWith(".m4v")) value += 20;
-      else value += 10;
-      if (Number(f.size) > 0) value += 1;
-      return value;
-    };
-    return score(b) - score(a);
-  });
+  const score = file => {
+    const name = String(file.name || "").toLowerCase();
+    const format = String(file.format || "").toLowerCase();
+    const info = codecInfo(file);
+    let value = 0;
+    if (/ge[-_ ]dubbed|georgian|geo[-_ ]dub/.test(name)) value += 1200;
+    if (info.h264) value += 900;
+    if (/\.ia\.mp4$/i.test(name)) value += 450;
+    if (/(?:^|[._-])512kb\.mp4$/i.test(name)) value += 300;
+    if (file.source === "derivative") value += 100;
+    if (name.endsWith(".mp4")) value += 40;
+    else if (name.endsWith(".m4v")) value += 30;
+    else if (name.endsWith(".webm")) value += 25;
+    else if (name.endsWith(".ogv")) value += 10;
+    if (/mpeg4|webm|ogg/.test(format)) value += 10;
+    if (Number(file.size) > 0) value += Math.min(20, Math.log10(Number(file.size) + 1));
+    return value;
+  };
 
-  const selected = playableFiles[0];
+  // Prefer a browser-oriented derivative, especially Archive.org's .ia.mp4,
+  // over a source filename that merely contains an HEVC label.
+  const pool = candidates.length ? candidates : files;
+  pool.sort((a, b) => score(b) - score(a));
+  const selected = pool[0];
+  const selectedCodec = codecInfo(selected);
   const name = selected.name.split("/").map(encodeURIComponent).join("/");
   const videoUrl = `https://archive.org/download/${encodeURIComponent(identifier)}/${name}`;
-  archiveVideoCache.set(identifier, { videoUrl, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
-  res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-  res.json({ videoUrl, format: selected.format || null });
-}));
+  const payload = {
+    videoUrl,
+    format: selected.format || null,
+    codec: selectedCodec.hevc ? "hevc" : (selectedCodec.h264 ? "h264" : "unknown"),
+    requiresHevc: selectedCodec.hevc,
+    archiveEmbedUrl: `https://archive.org/embed/${encodeURIComponent(identifier)}`
+  };
 
+  archiveVideoCache.set(identifier, { ...payload, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+  res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+  res.json(payload);
+}));
 app.get("/api/site-banners",wrap(async(_req,res)=>{
   const [rows]=await pool.query("SELECT b.id AS banner_id,b.image_url,b.image_data IS NOT NULL AS has_image,b.sort_order,m.id AS movie_id,m.imdb_id,m.title_en,m.title_ka,m.release_year,m.imdb_rating,m.genre,m.director,m.actors,m.poster_url,m.backdrop_url,m.video_url,m.video_type,m.description,m.video_views,UNIX_TIMESTAMP(b.updated_at)*1000 AS version FROM site_banners b JOIN movies m ON m.id=b.movie_id WHERE b.is_active=1 ORDER BY b.sort_order ASC,b.id ASC LIMIT 12");
   const banners=rows.map(row=>{
