@@ -2638,3 +2638,74 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .site-bg:after { animation: none !important; }
 }
+
+
+/* Georgian typography and readability pass — site-wide. */
+/* The Georgian font is already loaded from Google Fonts. Outfit remains the Latin face;
+   Noto Sans Georgian supplies Georgian glyphs and its 500 weight is now preferred. */
+:root {
+  --muted: rgba(255, 255, 255, .76);
+  --dim: rgba(255, 255, 255, .60);
+}
+body {
+  font-weight: 500;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+}
+:lang(ka),
+[lang="ka"] {
+  font-family: "Noto Sans Georgian", "Outfit", system-ui, sans-serif !important;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.65;
+}
+/* Improve Georgian copy even when the text is injected dynamically without lang="ka". */
+.hero p,
+.desc,
+.description-block .desc,
+.info .en,
+.facts,
+.facts div,
+.about p,
+.about-list li,
+.comment p,
+.comment time,
+.state,
+.filters label,
+.form label,
+.count,
+.card .year,
+.pill,
+footer {
+  font-weight: 500;
+}
+.hero p,
+.desc,
+.description-block .desc,
+.about p,
+.about-list li,
+.comment p {
+  color: rgba(255,255,255,.88);
+  line-height: 1.68;
+}
+.card .ka,
+.facts span,
+.row-head a,
+.page-head .count {
+  font-weight: 600;
+}
+input::placeholder,
+textarea::placeholder {
+  color: rgba(255,255,255,.62);
+  opacity: 1;
+}
+@media (max-width:700px) {
+  .hero p,
+  .desc,
+  .description-block .desc,
+  .about p,
+  .about-list li,
+  .comment p {
+    line-height: 1.7;
+  }
+}
