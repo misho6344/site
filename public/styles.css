@@ -2726,3 +2726,31 @@ textarea::placeholder {
 @media (max-width: 700px) {
   .site-bg:after { animation: none !important; }
 }
+
+
+/* Fast first paint: lightweight homepage placeholders while the API wakes up. */
+.home-loading-hero {
+  min-height: min(66vh, 540px);
+  background: radial-gradient(720px 420px at 72% 45%, rgba(130,191,160,.13), transparent 70%);
+}
+.home-loading-hero .hero-copy { animation: none; }
+.home-loading-row { padding-top: 26px; }
+.home-skeleton-card { flex: 0 0 clamp(150px,16vw,200px); min-width: 0; }
+.home-skeleton-poster {
+  aspect-ratio: 2 / 3;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, #1a1a1a, #101010);
+}
+.home-skeleton-line {
+  width: 82%;
+  height: 10px;
+  margin: 12px 0 0 2px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.09);
+}
+.home-skeleton-line.short { width: 48%; height: 8px; margin-top: 8px; }
+@media(max-width:700px) {
+  .home-loading-hero { min-height: min(58svh, 460px); }
+  .home-skeleton-card { flex-basis: clamp(132px,34vw,165px); }
+}
