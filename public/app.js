@@ -20,29 +20,6 @@ function rememberMovies(movies = []) {
 const $ = (id) => document.getElementById(id);
 const esc = (v = "") => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "");
-function tmdbImageVariant(value, width) {
-  const source = String(value || "");
-  try {
-    const url = new URL(source, location.origin);
-    if (url.hostname !== "image.tmdb.org") return source;
-    const match = url.pathname.match(/^\/t\/p\/(?:original|w\d+|h\d+)\/(.+)$/);
-    if (!match) return source;
-    url.pathname = "/t/p/w" + Number(width) + "/" + match[1];
-    return url.href;
-  } catch {
-    return source;
-  }
-}
-function tmdbImageSrcSet(value, widths) {
-  const source = String(value || "");
-  try {
-    const url = new URL(source, location.origin);
-    if (url.hostname !== "image.tmdb.org" || !/^\/t\/p\/(?:original|w\d+|h\d+)\//.test(url.pathname)) return "";
-    return widths.map(width => tmdbImageVariant(source, width) + " " + width + "w").join(", ");
-  } catch {
-    return "";
-  }
-}
 
 function movieSlug(title){return String(title||"movie").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"movie";}
 function moviePath(movie){return "/movies/"+encodeURIComponent(String(movie.id))+"/"+movieSlug(movie.title_en||movie.title_ka);}
@@ -177,11 +154,9 @@ function imdbBadge(m) {
 }
 function posterImg(m) {
   const art = localVideoArt(m);
-  const rawUrl = art?.poster || safeUrl(m.poster_url);
-  const url = tmdbImageVariant(rawUrl, 342);
-  const srcSet = tmdbImageSrcSet(rawUrl, [342, 500]);
+  const url = art?.poster || safeUrl(m.poster_url);
   return url
-    ? `<img src="${esc(url)}" ${srcSet ? `srcset="${esc(srcSet)}"` : ""} alt="Poster of ${esc(m.title_en)}" width="400" height="600" sizes="(max-width: 640px) 44vw, (max-width: 1100px) 28vw, 200px" loading="lazy" decoding="async" data-fallback>`
+    ? `<img src="${esc(url)}" alt="Poster of ${esc(m.title_en)}" width="400" height="600" sizes="(max-width: 640px) 44vw, (max-width: 1100px) 28vw, 200px" loading="lazy" decoding="async" data-fallback>`
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
 function cardHTML(m) {
@@ -284,14 +259,12 @@ function heroSlideHTML(m, active = true) {
   const aiBanner = /mickey\s*17/i.test(title)
     ? "/assets/hero-mickey17-ai.jpg"
     : (/the holdovers/i.test(title) ? "/assets/hero-holdovers-ai.jpg" : "");
-  const rawBg = safeUrl(m.banner_image_url) || localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
-  const bg = tmdbImageVariant(rawBg, 780);
-  const bgSrcSet = tmdbImageSrcSet(rawBg, [780, 1280]);
+  const bg = safeUrl(m.banner_image_url) || localArt?.backdrop || aiBanner || safeUrl(m.backdrop_url) || safeUrl(m.poster_url);
   const playable = !!safeUrl(m.video_url);
   const playHref = playable ? `${moviePath(m)}?play=1` : moviePath(m);
   const playLabel = playable ? (m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie") : "View Details";
   return `<section class="hero hero-slide${active ? " active" : ""}">
-    ${bg ? `<img class="hero-bg" src="${esc(bg)}" ${bgSrcSet ? `srcset="${esc(bgSrcSet)}"` : ""} alt="" data-hero width="1600" height="900" sizes="100vw" loading="${active ? "eager" : "lazy"}" fetchpriority="${active ? "high" : "auto"}" decoding="async">` : ""}
+    ${bg ? `<img class="hero-bg" src="${esc(bg)}" alt="" data-hero width="1600" height="900" sizes="100vw" loading="${active ? "eager" : "lazy"}" fetchpriority="${active ? "high" : "auto"}" decoding="async">` : ""}
     <div class="hero-copy">
       <span class="hero-tag">Featured</span>
       <h1>${esc(m.title_ka || m.title_en)}</h1>
