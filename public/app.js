@@ -1,4 +1,13 @@
 "use strict";
+(() => {
+  // Load Google Fonts after the first paint so a slow font CDN cannot hold up the page.
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+Georgian:wght@400;500;600;700&display=swap";
+  link.media = "print";
+  link.addEventListener("load", () => { link.media = "all"; }, { once: true });
+  document.head.appendChild(link);
+})();
 try {
   localStorage.removeItem("noadframe_token");
   localStorage.removeItem("noadframe_user");
@@ -61,14 +70,38 @@ function movieStructuredData(m,path){const url=new URL(path,location.origin).hre
 async function api(url, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   const csrf = document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith("noadframe_csrf="));
-  if (csrf && !["GET", "HEAD", "OPTIONS"].includes(String(options.method || "GET").toUpperCase())) headers["X-CSRF-Token"] = decodeURIComponent(csrf.slice("noadframe_csrf=".length));
+  const method = String(options.method || "GET").toUpperCase();
+  if (csrf && !["GET", "HEAD", "OPTIONS"].includes(method)) headers["X-CSRF-Token"] = decodeURIComponent(csrf.slice("noadframe_csrf=".length));
+
+  const retryDelays = [500, 1000, 1500, 2500, 4000, 6000, 8000, 10000, 10000];
+  const retryableRead = method === "GET" && String(url).startsWith("/api/");
   let response;
-  try {
-    response = await fetch(url, { cache: options.cache || "no-store", ...options, headers, credentials: "same-origin" });
-  } catch (error) {
-    reportBrowserError("network", error);
-    throw error;
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      response = await fetch(url, {
+        cache: options.cache || "no-store",
+        ...options,
+        headers,
+        credentials: "same-origin"
+      });
+    } catch (error) {
+      if (retryableRead && attempt < retryDelays.length) {
+        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        continue;
+      }
+      reportBrowserError("network", error);
+      throw error;
+    }
+
+    if (retryableRead && [502, 503, 504].includes(response.status) && attempt < retryDelays.length) {
+      try { await response.body?.cancel(); } catch { /* response is already closed */ }
+      await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+      continue;
+    }
+    break;
   }
+
   const data = await response.json().catch(() => ({}));
   if (response.status === 401 && !url.includes("/auth/login") && !url.includes("/auth/register")) {
     setSession(null);
@@ -208,65 +241,100 @@ document.addEventListener("error", (e) => {
 
 /* ---------- home ---------- */
 async function showHome() {
-  const heroRoot=$("hero"),rowsRoot=$("homeRows");
-  if(!heroRoot||!rowsRoot)return;
-  heroRoot.innerHTML="";
-  rowsRoot.innerHTML="";
+  const heroRoot = $("hero"), rowsRoot = $("homeRows");
+  if (!heroRoot || !rowsRoot) return;
+
+  const skeletonCards = Array.from({ length: 6 }, () => `
+    <div class="home-skeleton-card" aria-hidden="true">
+      <div class="home-skeleton-poster"></div>
+      <div class="home-skeleton-line"></div>
+      <div class="home-skeleton-line short"></div>
+    </div>`).join("");
+  heroRoot.innerHTML = `
+    <section class="hero hero-empty home-loading-hero">
+      <div class="hero-copy">
+        <span class="hero-tag">NoAdFrame</span>
+        <h1>Watch. Enjoy. <span class="grad">No Ads.</span></h1>
+        <p>Getting your cinema ready…</p>
+      </div>
+    </section>`;
+  rowsRoot.innerHTML = `
+    <section class="row home-loading-row">
+      <div class="row-head"><h2>Discover Movies</h2><span class="count">Loading collection…</span></div>
+      <div class="row-track">${skeletonCards}</div>
+    </section>`;
+
   try {
-    const [data,bannerData] = await Promise.all([
-      api("/api/movies/categories"),
-      api("/api/site-banners",{cache:"no-store"}).catch(()=>({banners:[]}))
-    ]);
-    const popular=Array.isArray(data.popular)?data.popular:[];
-    const topRated=Array.isArray(data.topRated)?data.topRated:[];
-    const newReleases=Array.isArray(data.newReleases)?data.newReleases:[];
-    const featured=Array.isArray(data.featured)?data.featured:[];
-    const all=[...featured,...topRated,...newReleases,...popular];
+    // Banners load independently so they cannot delay the movie rows or first hero.
+    const bannerPromise = api("/api/site-banners", { cache: "no-store" }).catch(() => ({ banners: [] }));
+    const data = await api("/api/movies/categories");
+    const popular = Array.isArray(data.popular) ? data.popular : [];
+    const topRated = Array.isArray(data.topRated) ? data.topRated : [];
+    const newReleases = Array.isArray(data.newReleases) ? data.newReleases : [];
+    const featured = Array.isArray(data.featured) ? data.featured : [];
+    const all = [...featured, ...topRated, ...newReleases, ...popular];
     rememberMovies(all);
-    warmArchiveVideoSources(all,3);
-    const configured=Array.isArray(bannerData.banners)?bannerData.banners:[];
-    const customBanners=configured.filter(item=>safeUrl(item.banner_image_url));
-    if(customBanners.length){
-      heroRoot.innerHTML=heroHTML(customBanners);
-    }else{
-      const featuredPool=[...featured,...all];
-      const mickey=featuredPool.find(m=>/mickey\s*17/i.test(m.title_en||""));
-      const holdovers=featuredPool.find(m=>/the holdovers/i.test(m.title_en||""));
-      const defaults=[mickey,holdovers].filter((movie,index,list)=>movie&&list.findIndex(x=>x&&x.id===movie.id)===index);
-      const fallback=defaults.length?defaults:[all.find(m=>safeUrl(m.backdrop_url))||topRated[0]||all[0]].filter(Boolean);
-      heroRoot.innerHTML=fallback.length?heroHTML(fallback):heroEmptyHTML();
-    }
-    const carousel=heroRoot.querySelector("[data-hero-carousel]");
-    if(carousel){
-      let activeIndex=0;
-      const slides=carousel.querySelectorAll(".hero-slide");
-      const dots=carousel.querySelectorAll(".hero-dot");
-      const showSlide=index=>{
-        activeIndex=(index+slides.length)%slides.length;
-        slides.forEach((slide,i)=>slide.classList.toggle("active",i===activeIndex));
-        dots.forEach((button,i)=>button.classList.toggle("active",i===activeIndex));
-      };
-      carousel.addEventListener("click",event=>{
-        const control=event.target.closest("[data-hero-nav]");
-        if(control){
-          showSlide(activeIndex+Number(control.dataset.heroNav));
-          return;
-        }
-        const dot=event.target.closest("[data-hero-index]");
-        if(dot)showSlide(Number(dot.dataset.heroIndex));
-      });
-      if(slides.length>1){
-        if(window.homeHeroTimer)clearInterval(window.homeHeroTimer);
-        window.homeHeroTimer=setInterval(()=>showSlide(activeIndex+1),6000);
-      }
-    }
-    const sections=[["Popular Movies",popular,"popular"],["Top Rated",topRated,"rating"],["New Releases",newReleases,"year"]];
-    rowsRoot.innerHTML=sections.filter(([,list])=>list.length).map(([title,list,sort])=>`
+
+    const featuredPool = [...featured, ...all];
+    const mickey = featuredPool.find(m => /mickey\s*17/i.test(m.title_en || ""));
+    const holdovers = featuredPool.find(m => /the holdovers/i.test(m.title_en || ""));
+    const defaults = [mickey, holdovers].filter((movie, index, list) =>
+      movie && list.findIndex(item => item && item.id === movie.id) === index
+    );
+    const fallback = defaults.length
+      ? defaults
+      : [all.find(m => safeUrl(m.backdrop_url)) || topRated[0] || all[0]].filter(Boolean);
+    heroRoot.innerHTML = fallback.length ? heroHTML(fallback) : heroEmptyHTML();
+
+    const sections = [
+      ["Popular Movies", popular, "popular"],
+      ["Top Rated", topRated, "rating"],
+      ["New Releases", newReleases, "year"]
+    ];
+    rowsRoot.innerHTML = sections.filter(([, list]) => list.length).map(([title, list, sort]) => `
       <section class="row"><div class="row-head"><h2>${title}</h2><a href="#/movies" data-sort="${sort}">See all</a></div>
       <div class="row-track">${list.map(cardHTML).join("")}</div></section>`).join("");
-  } catch(error) {
-    heroRoot.innerHTML=heroEmptyHTML();
-    rowsRoot.innerHTML=`<div class="page"><div class="state">${esc(error.message)}</div></div>`;
+
+    // Archive metadata is not needed for browsing; warm one source only after the first paint.
+    const warmSources = () => warmArchiveVideoSources(all, 1);
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(warmSources, { timeout: 4000 });
+    } else {
+      window.setTimeout(warmSources, 1500);
+    }
+
+    const bannerData = await bannerPromise;
+    const configured = Array.isArray(bannerData.banners) ? bannerData.banners : [];
+    const customBanners = configured.filter(item => safeUrl(item.banner_image_url));
+    if (customBanners.length) heroRoot.innerHTML = heroHTML(customBanners);
+
+    const carousel = heroRoot.querySelector("[data-hero-carousel]");
+    if (carousel) {
+      let activeIndex = 0;
+      const slides = carousel.querySelectorAll(".hero-slide");
+      const dots = carousel.querySelectorAll(".hero-dot");
+      const showSlide = index => {
+        activeIndex = (index + slides.length) % slides.length;
+        slides.forEach((slide, i) => slide.classList.toggle("active", i === activeIndex));
+        dots.forEach((button, i) => button.classList.toggle("active", i === activeIndex));
+      };
+      carousel.addEventListener("click", event => {
+        const control = event.target.closest("[data-hero-nav]");
+        if (control) {
+          showSlide(activeIndex + Number(control.dataset.heroNav));
+          return;
+        }
+        const dot = event.target.closest("[data-hero-index]");
+        if (dot) showSlide(Number(dot.dataset.heroIndex));
+      });
+      if (slides.length > 1) {
+        if (window.homeHeroTimer) clearInterval(window.homeHeroTimer);
+        window.homeHeroTimer = setInterval(() => showSlide(activeIndex + 1), 6000);
+      }
+    }
+  } catch (error) {
+    heroRoot.innerHTML = heroEmptyHTML();
+    rowsRoot.innerHTML = `<div class="page"><div class="state">${esc(error.message)}</div></div>`;
   }
 }
 function heroHTML(movies) {
@@ -997,6 +1065,8 @@ async function route(){
  if(location.pathname==="/"&&["movies","genres","about"].includes(parts[0]))history.replaceState(null,"","/"+parts[0]);
  document.querySelectorAll(".view").forEach(el=>{el.hidden=el.dataset.view!==view;});
  document.querySelectorAll("[data-nav]").forEach(a=>a.classList.toggle("active",a.dataset.nav===(view==="movie"?"movies":view)));
+ // Show the app shell immediately; data fills the visible page in the background.
+ dismissBootScreen();
  window.scrollTo(0,0);if(view!=="movies"&&view!=="movie")$("searchInput").value=state.filters.q;
  try{
  if(view==="home")await showHome();
@@ -1124,4 +1194,12 @@ $("chatForm").addEventListener("submit", e => {
 $("chatChips").addEventListener("click", e => { if (e.target.tagName === "BUTTON") sendChat(e.target.textContent); });
 
 renderAuth();
-restoreSession().finally(() => { route(); });
+const initialPath = location.pathname.replace(/\\/+$/, "") || "/";
+const initialHashParts = location.hash.slice(1).split("/").filter(Boolean);
+if (initialPath === "/" && initialHashParts.length === 0) {
+  // The public homepage does not need to wait for session restoration.
+  void route();
+  void restoreSession();
+} else {
+  restoreSession().finally(() => { void route(); });
+}
