@@ -190,7 +190,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", (req, res, next) => {
-  const hasBearer = /^Bearer\\s+/i.test(req.get("authorization") || "");
+  const hasBearer = /^Bearer\s+/i.test(req.get("authorization") || "");
   const guestSessionCheck = req.path === "/auth/me" && !req.cookies?.[SESSION_COOKIE] && !hasBearer;
   if (databaseReady || req.path === "/health" || req.path === "/client-errors" || guestSessionCheck) {
     return next();
