@@ -361,9 +361,19 @@ app.get("/api/site-banner/image", wrap(async (_req,res)=>{
   res.set({"Content-Type":rows[0].mime_type||"application/octet-stream","Cache-Control":"public, max-age=31536000, immutable","X-Content-Type-Options":"nosniff"});
   res.end(rows[0].image_data);
 }));
-app.get("/api/health", healthLimiter, wrap(async (_req, res) => {
-  await pool.query("SELECT 1");
-  res.json({ status: "ok", database: "connected" });
+// Liveness must reflect the Node process, not a transient database connection.
+app.get("/api/health", healthLimiter, (_req, res) => {
+  res.json({ status: "ok" });
+});
+// Database readiness is available separately for diagnostics and monitoring.
+app.get("/api/ready", healthLimiter, wrap(async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    return res.json({ status: "ready", database: "connected" });
+  } catch (error) {
+    console.error("[DB READY CHECK]", String(error?.message || "Database unavailable").slice(0, 300));
+    return res.status(503).json({ status: "degraded", database: "unavailable" });
+  }
 }));
 
 /* ---------- auth ---------- */
