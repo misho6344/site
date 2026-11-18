@@ -1194,7 +1194,7 @@ $("chatForm").addEventListener("submit", e => {
 $("chatChips").addEventListener("click", e => { if (e.target.tagName === "BUTTON") sendChat(e.target.textContent); });
 
 renderAuth();
-const initialPath = location.pathname.replace(/\\/+$/, "") || "/";
+const initialPath = location.pathname || "/";
 const initialHashParts = location.hash.slice(1).split("/").filter(Boolean);
 if (initialPath === "/" && initialHashParts.length === 0) {
   // The public homepage does not need to wait for session restoration.
