@@ -184,13 +184,14 @@ function posterImg(m) {
     ? `<img src="${esc(url)}" ${srcSet ? `srcset="${esc(srcSet)}"` : ""} alt="Poster of ${esc(m.title_en)}" width="400" height="600" sizes="(max-width: 640px) 44vw, (max-width: 1100px) 28vw, 200px" loading="lazy" decoding="async" data-fallback>`
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
-function cardHTML(m) {
+function cardHTML(m, headingLevel = 3) {
+  const headingTag = headingLevel === 2 ? "h2" : "h3";
   // Only mark a card as playable when the public API actually exposes a usable URL.
   const hasVideo = !!safeUrl(m.video_url);
   const href = moviePath(m);
   return `<a class="card${hasVideo ? " has-video" : ""}" href="${href}" aria-label="${esc(m.title_en)}">
     <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div></div>
-    <h3>${esc(m.title_en)}</h3>
+    <${headingTag}>${esc(m.title_en)}</${headingTag}>
     <div class="ka">${esc(m.title_ka || "")}</div>
     <div class="year">${esc(m.release_year || "—")}</div>
   </a>`;
@@ -339,7 +340,7 @@ async function loadCatalog() {
     warmArchiveVideoSources(data.movies.slice(0, 8), 2);
     state.page = data.page; state.totalPages = data.totalPages;
     $("movieCount").textContent = `${data.total} movie${data.total === 1 ? "" : "s"}`;
-    $("movieGrid").innerHTML = data.movies.length ? data.movies.map(cardHTML).join("") : `<div class="state">No movies match your search.</div>`;
+    $("movieGrid").innerHTML = data.movies.length ? data.movies.map(movie => cardHTML(movie, 2)).join("") : `<div class="state">No movies match your search.</div>`;
     renderPagination();
   } catch (error) {
     $("movieGrid").innerHTML = `<div class="state">${esc(error.message)}</div>`;
