@@ -54,6 +54,12 @@ function seoShell({title,description,path,image,graph,body="",noindex=false,ogTy
 }
 
 let pool;
+let databaseReady = false;
+const TRANSIENT_STARTUP_ERRORS = new Set([
+  "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EHOSTUNREACH",
+  "ENETUNREACH", "EPIPE", "PROTOCOL_CONNECTION_LOST",
+  "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR"
+]);
 const production = process.env.NODE_ENV === "production";
 const trustProxyHops = process.env.TRUST_PROXY_HOPS === undefined
   ? (production ? 1 : 0)
@@ -181,6 +187,22 @@ app.use((req, res, next) => {
     else console.warn("[HTTP WARNING]", line);
   });
   next();
+});
+
+app.use("/api", (req, res, next) => {
+  const hasBearer = /^Bearer\\s+/i.test(req.get("authorization") || "");
+  const guestSessionCheck = req.path === "/auth/me" && !req.cookies?.[SESSION_COOKIE] && !hasBearer;
+  if (databaseReady || req.path === "/health" || req.path === "/client-errors" || guestSessionCheck) {
+    return next();
+  }
+  res.set("Retry-After", "2").status(503).json({
+    error: "NoAdFrame is preparing the catalogue. Please retry shortly.",
+    retryable: true
+  });
+});
+
+app.get("/api/health", healthLimiter, (_req, res) => {
+  res.json({ ok: true, database: databaseReady ? "ready" : "warming" });
 });
 
 
@@ -1022,20 +1044,35 @@ app.use((error, req, res, next) => {
   });
 });
 
+async function initializeDatabase(server) {
+  try {
+    // All operations in this block are safe to re-run (IF NOT EXISTS, INSERT IGNORE, or conditional UPDATE).
+    await withDatabaseRetry(async () => {
+      await initSchema(pool);
+      await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+      await pool.query("CREATE TABLE IF NOT EXISTS site_banners (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, legacy_source_id TINYINT UNSIGNED NULL UNIQUE, movie_id BIGINT UNSIGNED NULL, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, is_active TINYINT(1) NOT NULL DEFAULT 0, sort_order INT NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX idx_site_banners_active_sort (is_active,sort_order), INDEX idx_site_banners_movie (movie_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+      await pool.query("INSERT IGNORE INTO site_banners (legacy_source_id,movie_id,image_url,image_data,mime_type,is_active,sort_order) SELECT 1,(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1),image_url,image_data,mime_type,1,0 FROM site_banner WHERE id=1 AND ((image_url IS NOT NULL AND image_url<>'') OR image_data IS NOT NULL)");
+      await pool.query("UPDATE site_banners SET movie_id=(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1) WHERE legacy_source_id=1 AND movie_id IS NULL");
+      await pool.query("CREATE TABLE IF NOT EXISTS site_home_sections (section_key VARCHAR(32) NOT NULL PRIMARY KEY, movie_ids MEDIUMTEXT NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    }, "startup schema initialization");
+
+    databaseReady = true;
+    console.log("NoAdFrame database ready");
+  } catch (error) {
+    const code = String(error?.code || "").toUpperCase();
+    console.error("Database initialization failed:", error);
+    if (TRANSIENT_STARTUP_ERRORS.has(code)) {
+      console.warn("[DB] HTTP server remains available; retrying database initialization in 10 seconds.", { code });
+      const retryTimer = setTimeout(() => { void initializeDatabase(server); }, 10_000);
+      retryTimer.unref();
+      return;
+    }
+    server.close(() => process.exit(1));
+  }
+}
+
 async function start() {
   pool = createPool();
-  // All operations in this block are safe to re-run (IF NOT EXISTS, INSERT IGNORE, or conditional UPDATE).
-  // Keep the previous application deploy available when the database briefly drops a connection.
-  await withDatabaseRetry(async () => {
-    await initSchema(pool);
-    await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    await pool.query("CREATE TABLE IF NOT EXISTS site_banners (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, legacy_source_id TINYINT UNSIGNED NULL UNIQUE, movie_id BIGINT UNSIGNED NULL, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, is_active TINYINT(1) NOT NULL DEFAULT 0, sort_order INT NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX idx_site_banners_active_sort (is_active,sort_order), INDEX idx_site_banners_movie (movie_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    await pool.query("INSERT IGNORE INTO site_banners (legacy_source_id,movie_id,image_url,image_data,mime_type,is_active,sort_order) SELECT 1,(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1),image_url,image_data,mime_type,1,0 FROM site_banner WHERE id=1 AND ((image_url IS NOT NULL AND image_url<>'') OR image_data IS NOT NULL)");
-    await pool.query("UPDATE site_banners SET movie_id=(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1) WHERE legacy_source_id=1 AND movie_id IS NULL");
-    await pool.query("CREATE TABLE IF NOT EXISTS site_home_sections (section_key VARCHAR(32) NOT NULL PRIMARY KEY, movie_ids MEDIUMTEXT NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-  }, "startup schema initialization");
-
-
 
   const server = http.createServer(app);
   server.headersTimeout = 10_000;
@@ -1043,10 +1080,10 @@ async function start() {
   server.maxHeadersCount = 50;
 
   server.listen(PORT, () => {
-    console.log(`NoAdFrame server running on http://localhost:${PORT}`);
+    console.log(`NoAdFrame HTTP server ready on http://localhost:${PORT}`);
+    void initializeDatabase(server);
   });
 }
-
 start().catch(async err => {
   console.error("Failed to start server:", err);
   if (pool) {
