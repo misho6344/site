@@ -12,7 +12,7 @@ const crypto = require("crypto");
 const { UpstashRateLimitStore } = require("./lib/upstash-rate-limit-store");
 const { parsePagination, paginationMeta } = require("./lib/pagination");
 const { SESSION_COOKIE, CSRF_COOKIE, cookieOptions, parseCookies, createResetToken, hashResetToken, csrfMatches, validPassword } = require("./lib/auth-security");
-const { createPool, initSchema } = require("./lib/db");
+const { createPool, initSchema, withDatabaseRetry } = require("./lib/db");
 const { upsertMovie, httpError } = require("./lib/movies");
 
 const app = express();
@@ -1024,12 +1024,16 @@ app.use((error, req, res, next) => {
 
 async function start() {
   pool = createPool();
-  await initSchema(pool);
-  await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-  await pool.query("CREATE TABLE IF NOT EXISTS site_banners (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, legacy_source_id TINYINT UNSIGNED NULL UNIQUE, movie_id BIGINT UNSIGNED NULL, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, is_active TINYINT(1) NOT NULL DEFAULT 0, sort_order INT NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX idx_site_banners_active_sort (is_active,sort_order), INDEX idx_site_banners_movie (movie_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-  await pool.query("INSERT IGNORE INTO site_banners (legacy_source_id,movie_id,image_url,image_data,mime_type,is_active,sort_order) SELECT 1,(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1),image_url,image_data,mime_type,1,0 FROM site_banner WHERE id=1 AND ((image_url IS NOT NULL AND image_url<>'') OR image_data IS NOT NULL)");
-  await pool.query("UPDATE site_banners SET movie_id=(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1) WHERE legacy_source_id=1 AND movie_id IS NULL");
-  await pool.query("CREATE TABLE IF NOT EXISTS site_home_sections (section_key VARCHAR(32) NOT NULL PRIMARY KEY, movie_ids MEDIUMTEXT NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+  // All operations in this block are safe to re-run (IF NOT EXISTS, INSERT IGNORE, or conditional UPDATE).
+  // Keep the previous application deploy available when the database briefly drops a connection.
+  await withDatabaseRetry(async () => {
+    await initSchema(pool);
+    await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    await pool.query("CREATE TABLE IF NOT EXISTS site_banners (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, legacy_source_id TINYINT UNSIGNED NULL UNIQUE, movie_id BIGINT UNSIGNED NULL, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, is_active TINYINT(1) NOT NULL DEFAULT 0, sort_order INT NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX idx_site_banners_active_sort (is_active,sort_order), INDEX idx_site_banners_movie (movie_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    await pool.query("INSERT IGNORE INTO site_banners (legacy_source_id,movie_id,image_url,image_data,mime_type,is_active,sort_order) SELECT 1,(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1),image_url,image_data,mime_type,1,0 FROM site_banner WHERE id=1 AND ((image_url IS NOT NULL AND image_url<>'') OR image_data IS NOT NULL)");
+    await pool.query("UPDATE site_banners SET movie_id=(SELECT id FROM movies ORDER BY views DESC,id DESC LIMIT 1) WHERE legacy_source_id=1 AND movie_id IS NULL");
+    await pool.query("CREATE TABLE IF NOT EXISTS site_home_sections (section_key VARCHAR(32) NOT NULL PRIMARY KEY, movie_ids MEDIUMTEXT NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+  }, "startup schema initialization");
 
 
 
@@ -1043,7 +1047,14 @@ async function start() {
   });
 }
 
-start().catch(err => {
+start().catch(async err => {
   console.error("Failed to start server:", err);
-  process.exit(err.origin || err);
+  if (pool) {
+    try {
+      await pool.end();
+    } catch (closeError) {
+      console.error("Failed to close database pool after startup failure:", closeError?.message || closeError);
+    }
+  }
+  process.exitCode = 1;
 });
