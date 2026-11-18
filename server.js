@@ -944,7 +944,11 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
   ].filter(Boolean).join(" · ");
   const summary = String(m.description || name + " — movie details, cast and IMDb information on NoAdFrame.")
     .replace(/\s+/g, " ").trim().slice(0, 280);
-  const desc = details ? summary + " " + details : summary;
+  const titleParts = [m.title_ka || m.title_en, m.title_ka ? "(" + m.title_en + ")" : "", m.release_year || ""].filter(Boolean);
+  const seoTitle = titleParts.join(" ") + " — NoAdFrame";
+  const plotForSnippet = String(m.description || "ფილმის აღწერა, მსახიობები და დეტალები").replace(/\s+/g, " ").trim();
+  const snippetFacts = [m.genre || "", m.imdb_rating ? "IMDb " + Number(m.imdb_rating).toFixed(1) : ""].filter(Boolean).join(" · ");
+  const desc = (name + " — " + plotForSnippet + (snippetFacts ? " · " + snippetFacts : "") + " · NoAdFrame-ზე").slice(0, 160);
 
   const graph = {
     "@context": "https://schema.org",
@@ -981,7 +985,7 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
 
   res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
   res.type("html").send(seoShell({
-    title: name + " — NoAdFrame",
+    title: seoTitle,
     description: desc,
     path: route,
     image: m.poster_url,
