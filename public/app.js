@@ -156,7 +156,7 @@ function posterImg(m) {
   const art = localVideoArt(m);
   const url = art?.poster || safeUrl(m.poster_url);
   return url
-    ? `<img src="${esc(url)}" alt="Poster of ${esc(m.title_en)}" loading="lazy" decoding="async" data-fallback>`
+    ? `<img src="${esc(url)}" alt="Poster of ${esc(m.title_en)}" width="400" height="600" sizes="(max-width: 640px) 44vw, (max-width: 1100px) 28vw, 200px" loading="lazy" decoding="async" data-fallback>`
     : `<div class="poster-fallback"><img src="/assets/logo.png" alt=""></div>`;
 }
 function cardHTML(m) {
@@ -264,7 +264,7 @@ function heroSlideHTML(m, active = true) {
   const playHref = playable ? `${moviePath(m)}?play=1` : moviePath(m);
   const playLabel = playable ? (m.video_type === "trailer" ? "▶ Watch Trailer" : "▶ Watch Movie") : "View Details";
   return `<section class="hero hero-slide${active ? " active" : ""}">
-    ${bg ? `<img class="hero-bg" src="${esc(bg)}" alt="" data-hero>` : ""}
+    ${bg ? `<img class="hero-bg" src="${esc(bg)}" alt="" data-hero width="1600" height="900" sizes="100vw" loading="${active ? "eager" : "lazy"}" fetchpriority="${active ? "high" : "auto"}" decoding="async">` : ""}
     <div class="hero-copy">
       <span class="hero-tag">Featured</span>
       <h1>${esc(m.title_ka || m.title_en)}</h1>
