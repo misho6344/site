@@ -752,6 +752,54 @@ function mountPlayer({ userInitiated = false } = {}) {
   renderPlayerSource(box, movie, embed, { userInitiated });
 }
 
+let relatedCatalogPromise = null;
+async function renderRelatedMovies(currentMovie) {
+  const movieId = String(currentMovie?.id || "");
+  const root = $("relatedMovies");
+  if (!root || !movieId) return;
+
+  try {
+    if (!relatedCatalogPromise) {
+      relatedCatalogPromise = api("/api/movies/categories").catch(error => {
+        relatedCatalogPromise = null;
+        throw error;
+      });
+    }
+    const data = await relatedCatalogPromise;
+    if (String(currentMovie?.id || "") !== movieId || $("relatedMovies") !== root) return;
+    const candidates = [
+      ...(Array.isArray(data.popular) ? data.popular : []),
+      ...(Array.isArray(data.topRated) ? data.topRated : []),
+      ...(Array.isArray(data.newReleases) ? data.newReleases : []),
+      ...(Array.isArray(data.featured) ? data.featured : [])
+    ];
+    rememberMovies(candidates);
+
+    const currentGenres = new Set(String(currentMovie.genre || "")
+      .split(",").map(value => value.trim().toLowerCase()).filter(Boolean));
+    const unique = new Map();
+    for (const movie of candidates) {
+      if (!movie || String(movie.id) === movieId || movie.id == null) continue;
+      if (!unique.has(String(movie.id))) unique.set(String(movie.id), movie);
+    }
+    const movies = [...unique.values()];
+    const sameGenre = movies.filter(movie =>
+      String(movie.genre || "").split(",").some(value => currentGenres.has(value.trim().toLowerCase()))
+    );
+    const ordered = [...sameGenre, ...movies.filter(movie => !sameGenre.includes(movie))].slice(0, 6);
+
+    if (!ordered.length) {
+      root.innerHTML = '<a class="btn ghost" href="/movies">Browse all movies</a>';
+      return;
+    }
+    if (String(currentMovie?.id || "") !== movieId || $("relatedMovies") !== root) return;
+    root.innerHTML = ordered.map(movie => cardHTML(movie)).join("");
+  } catch {
+    const target = $("relatedMovies");
+    if (target) target.innerHTML = '<a class="btn ghost" href="/movies">Browse all movies</a>';
+  }
+}
+
 async function showMovie(id, autoplay) {
   const view = $("movieView");
   view.innerHTML = `<div class="state">Loading...</div>`;
@@ -792,6 +840,11 @@ async function showMovie(id, autoplay) {
       <div class="player" id="player">
         <button class="player-cover" id="playerCover" type="button" aria-label="Play">${cover ? `<img src="${esc(cover)}" alt="">` : ""}<span class="big">▶</span></button>
       </div>
+      <section class="row related-movies" aria-labelledby="relatedMoviesTitle">
+        <div class="row-head"><h2 id="relatedMoviesTitle">More Movies to Discover</h2><a href="/movies">See all movies</a></div>
+        <div class="row-track" id="relatedMovies"><div class="state">Loading movies...</div></div>
+      </section>
+    void renderRelatedMovies(m);
       <section class="comments" aria-labelledby="commentsTitle">
         <div class="comments-top"><div><h2 id="commentsTitle">Comments</h2><span class="count" id="commentCount"></span></div>
           <label class="count">Sort <select id="commentSort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div>
