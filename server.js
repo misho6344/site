@@ -1094,6 +1094,12 @@ async function initializeDatabase(server) {
 
 async function start() {
   pool = createPool();
+  try {
+    const target = new URL(process.env.DATABASE_URL);
+    console.info("[DB] Connection target", { host: target.hostname, port: target.port || "3306", tls: String(process.env.DB_SSL || "true").toLowerCase() !== "false" });
+  } catch {
+    console.error("[DB] DATABASE_URL is not a valid URL.");
+  }
 
   const server = http.createServer(app);
   server.headersTimeout = 10_000;
