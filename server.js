@@ -149,6 +149,42 @@ app.use((req, res, next) => {
   next();
 });
 if (process.env.CORS_ORIGIN) app.use(cors({ origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()), credentials: true }));
+
+// Live movie availability notifications: admin save -> site SSE clients.
+const movieEventClients = new Set();
+function broadcastMovieAvailability(payload) {
+  const packet = "event: movie-availability\ndata: " + JSON.stringify(payload) + "\n\n";
+  for (const client of movieEventClients) {
+    try { client.write(packet); } catch { movieEventClients.delete(client); }
+  }
+}
+app.get("/api/movie-events", (req, res) => {
+  res.status(200).set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+  res.flushHeaders?.();
+  res.write("retry: 5000\n\n");
+  movieEventClients.add(res);
+  req.on("close", () => movieEventClients.delete(res));
+});
+app.post("/api/internal/movie-events", (req, res) => {
+  const expected = String(process.env.MOVIE_EVENTS_SECRET || "");
+  const supplied = String(req.get("x-movie-events-secret") || "");
+  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(supplied);
+  if (expectedBuffer.length < 32 || expectedBuffer.length !== suppliedBuffer.length ||
+      !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const movieId = Number(req.body?.movieId);
+  if (!Number.isSafeInteger(movieId) || movieId <= 0) return res.status(400).json({ error: "Invalid movie ID" });
+  broadcastMovieAvailability({ movieId, hasVideo: Boolean(req.body?.hasVideo) });
+  res.json({ ok: true });
+});
+
 app.use(express.json({ limit: "32kb" }));
 function appendCookie(res, name, value, options = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${options.path || "/"}`, "SameSite=Lax"];
