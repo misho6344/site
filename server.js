@@ -12,7 +12,7 @@ const crypto = require("crypto");
 const { UpstashRateLimitStore } = require("./lib/upstash-rate-limit-store");
 const { parsePagination, paginationMeta } = require("./lib/pagination");
 const { SESSION_COOKIE, CSRF_COOKIE, cookieOptions, parseCookies, createResetToken, hashResetToken, csrfMatches, validPassword } = require("./lib/auth-security");
-const { createPool, initSchema, withDatabaseRetry } = require("./lib/db");
+const { createPool, initSchema, withDatabaseRetry, getTransientConnectionCode } = require("./lib/db");
 const { upsertMovie, httpError } = require("./lib/movies");
 
 const app = express();
@@ -1080,7 +1080,7 @@ async function initializeDatabase(server) {
     startDatabaseKeepalive();
     console.log("NoAdFrame database ready");
   } catch (error) {
-    const code = String(error?.code || "").toUpperCase();
+    const code = getTransientConnectionCode(error);
     console.error("Database initialization failed:", error);
     if (TRANSIENT_STARTUP_ERRORS.has(code)) {
       console.warn("[DB] HTTP server remains available; retrying database initialization in 10 seconds.", { code });
