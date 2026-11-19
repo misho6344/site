@@ -2683,3 +2683,47 @@ body {
   .home-loading-hero { min-height: min(58svh, 460px); }
   .home-skeleton-card { flex-basis: clamp(132px,34vw,165px); }
 }
+
+
+/* Grey out movies that do not have a playable video link yet. */
+.card.coming-soon .poster img {
+  filter: grayscale(1);
+  opacity: .58;
+}
+.card.coming-soon .poster::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(12, 13, 15, .22);
+}
+.card.coming-soon .play {
+  display: none;
+}
+.coming-soon-ribbon {
+  position: absolute;
+  z-index: 2;
+  top: 46%;
+  left: -18%;
+  width: 136%;
+  padding: 9px 8px;
+  transform: rotate(-32deg);
+  background: rgba(25, 27, 30, .88);
+  border-top: 1px solid rgba(255,255,255,.22);
+  border-bottom: 1px solid rgba(255,255,255,.22);
+  color: rgba(255,255,255,.78);
+  font-family: var(--ka);
+  font-size: clamp(10px, 1.05vw, 13px);
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.35;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  pointer-events: none;
+}
+@media (max-width: 700px) {
+  .coming-soon-ribbon {
+    padding: 7px 6px;
+    font-size: 10px;
+  }
+}
