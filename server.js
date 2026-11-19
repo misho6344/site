@@ -150,6 +150,8 @@ app.use((req, res, next) => {
 });
 if (process.env.CORS_ORIGIN) app.use(cors({ origin: process.env.CORS_ORIGIN.split(",").map(s => s.trim()), credentials: true }));
 
+
+app.use(express.json({ limit: "32kb" }));
 // Live movie availability notifications: admin save -> site SSE clients.
 const movieEventClients = new Set();
 function broadcastMovieAvailability(payload) {
@@ -185,7 +187,6 @@ app.post("/api/internal/movie-events", (req, res) => {
   res.json({ ok: true });
 });
 
-app.use(express.json({ limit: "32kb" }));
 function appendCookie(res, name, value, options = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${options.path || "/"}`, "SameSite=Lax"];
   if (options.maxAge !== undefined) parts.push(`Max-Age=${Math.floor(options.maxAge / 1000)}`);
