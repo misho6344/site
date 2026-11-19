@@ -976,6 +976,18 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
       title: "Movie not found — NoAdFrame", description: "Movie not found.", path: "/", noindex: true
     }));
   }
+  // When the database is still recovering, serve the SPA shell immediately.
+  // The browser can render any cached movie data without waiting for a DB timeout.
+  if (!databaseReady) {
+    res.set("Cache-Control", "no-store");
+    return res.type("html").send(seoShell({
+      title: "Movie — NoAdFrame",
+      description: "Open movie details on NoAdFrame.",
+      path: req.path,
+      noindex: true
+    }));
+  }
+
   const [rows] = await pool.query("SELECT m.* FROM movies m WHERE id = ?", [req.params.id]);
   if (!rows.length) {
     return res.status(404).type("html").send(seoShell({
