@@ -1223,6 +1223,63 @@ $("chatForm").addEventListener("submit", e => {
 });
 $("chatChips").addEventListener("click", e => { if (e.target.tagName === "BUTTON") sendChat(e.target.textContent); });
 
+/* Refresh movie availability while visitors keep the site open.
+   Admin changes become visible automatically without a manual page reload. */
+let availabilityRefreshRunning = false;
+async function refreshVisibleMovieAvailability() {
+  if (availabilityRefreshRunning || document.visibilityState !== "visible") return;
+  const homeVisible = !!document.querySelector('[data-view="home"]:not([hidden])');
+  const moviesVisible = !!document.querySelector('[data-view="movies"]:not([hidden])');
+  if (!homeVisible && !moviesVisible) return;
+  const cards = [...document.querySelectorAll(".card[href^='/movies/']")];
+  if (!cards.length) return;
+
+  availabilityRefreshRunning = true;
+  try {
+    let movies = [];
+    if (homeVisible) {
+      const data = await api("/api/movies/categories");
+      movies = [...(data.popular || []), ...(data.topRated || []), ...(data.newReleases || [])];
+    } else {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(state.filters)) if (value) params.set(key, value);
+      params.set("page", String(state.page));
+      params.set("limit", "24");
+      const data = await api(`/api/movies?${params}`);
+      movies = data.movies || [];
+    }
+
+    const availabilityById = new Map(movies.map(movie => [String(movie.id), !!safeUrl(movie.video_url)]));
+    cards.forEach(card => {
+      const match = card.getAttribute("href").match(/^\/movies\/(\d+)/);
+      if (!match || !availabilityById.has(match[1])) return;
+      const hasVideo = availabilityById.get(match[1]);
+      card.classList.toggle("has-video", hasVideo);
+      card.classList.toggle("coming-soon", !hasVideo);
+      const poster = card.querySelector(".poster");
+      if (!poster) return;
+      let ribbon = poster.querySelector(".coming-soon-ribbon");
+      if (!hasVideo && !ribbon) {
+        ribbon = document.createElement("div");
+        ribbon.className = "coming-soon-ribbon";
+        ribbon.textContent = "ფილმი მალე გახმოვანდება";
+        poster.appendChild(ribbon);
+      } else if (hasVideo && ribbon) {
+        ribbon.remove();
+      }
+    });
+  } catch {
+    // Keep the last known availability state if the API is temporarily unavailable.
+  } finally {
+    availabilityRefreshRunning = false;
+  }
+}
+window.setInterval(refreshVisibleMovieAvailability, 10000);
+window.addEventListener("focus", refreshVisibleMovieAvailability);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshVisibleMovieAvailability();
+});
+
 renderAuth();
 const initialPath = location.pathname || "/";
 const initialHashParts = location.hash.slice(1).split("/").filter(Boolean);
