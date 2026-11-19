@@ -73,7 +73,12 @@ async function api(url, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   if (csrf && !["GET", "HEAD", "OPTIONS"].includes(method)) headers["X-CSRF-Token"] = decodeURIComponent(csrf.slice("noadframe_csrf=".length));
 
-  const retryDelays = [500, 1000, 1500, 2500, 4000, 6000, 8000, 10000, 10000];
+  // Do not make visitors wait through a long retry ladder when the database is
+  // unavailable. Cached catalogue responses are served immediately by cache.js;
+  // a live network failure gets one short retry, while DB-warming HTTP 503 is
+  // returned immediately so the visible page can show a useful message.
+  const networkRetryDelays = [750];
+  const gatewayRetryDelays = [750];
   const retryableRead = method === "GET" && String(url).startsWith("/api/");
   let response;
 
@@ -86,17 +91,17 @@ async function api(url, options = {}) {
         credentials: "same-origin"
       });
     } catch (error) {
-      if (retryableRead && attempt < retryDelays.length) {
-        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+      if (retryableRead && attempt < networkRetryDelays.length) {
+        await new Promise(resolve => setTimeout(resolve, networkRetryDelays[attempt]));
         continue;
       }
       reportBrowserError("network", error);
       throw error;
     }
 
-    if (retryableRead && [502, 503, 504].includes(response.status) && attempt < retryDelays.length) {
+    if (retryableRead && [502, 504].includes(response.status) && attempt < gatewayRetryDelays.length) {
       try { await response.body?.cancel(); } catch { /* response is already closed */ }
-      await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+      await new Promise(resolve => setTimeout(resolve, gatewayRetryDelays[attempt]));
       continue;
     }
     break;
