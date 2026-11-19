@@ -183,6 +183,9 @@ app.post("/api/internal/movie-events", (req, res) => {
   }
   const movieId = Number(req.body?.movieId);
   if (!Number.isSafeInteger(movieId) || movieId <= 0) return res.status(400).json({ error: "Invalid movie ID" });
+  categoryResponseCache.data = null;
+  categoryResponseCache.expiresAt = 0;
+  categoryResponseCache.staleUntil = 0;
   broadcastMovieAvailability({ movieId, hasVideo: Boolean(req.body?.hasVideo) });
   res.json({ ok: true });
 });
