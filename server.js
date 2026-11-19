@@ -55,6 +55,26 @@ function seoShell({title,description,path,image,graph,body="",noindex=false,ogTy
 
 let pool;
 let databaseReady = false;
+let databaseKeepaliveTimer = null;
+let lastDatabaseKeepaliveWarningAt = 0;
+const DATABASE_KEEPALIVE_INTERVAL_MS = 2 * 60 * 1000;
+
+function startDatabaseKeepalive() {
+  if (databaseKeepaliveTimer) return;
+  databaseKeepaliveTimer = setInterval(async () => {
+    try {
+      await pool.query("SELECT 1");
+    } catch (error) {
+      const now = Date.now();
+      if (now - lastDatabaseKeepaliveWarningAt >= 60_000) {
+        const code = String(error?.code || "UNKNOWN").toUpperCase();
+        console.warn("[DB] Keep-alive check failed; database may be sleeping or unreachable.", { code });
+        lastDatabaseKeepaliveWarningAt = now;
+      }
+    }
+  }, DATABASE_KEEPALIVE_INTERVAL_MS);
+  databaseKeepaliveTimer.unref();
+}
 const TRANSIENT_STARTUP_ERRORS = new Set([
   "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EHOSTUNREACH",
   "ENETUNREACH", "EPIPE", "PROTOCOL_CONNECTION_LOST",
@@ -1057,6 +1077,7 @@ async function initializeDatabase(server) {
     }, "startup schema initialization");
 
     databaseReady = true;
+    startDatabaseKeepalive();
     console.log("NoAdFrame database ready");
   } catch (error) {
     const code = String(error?.code || "").toUpperCase();
