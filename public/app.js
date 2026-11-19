@@ -1223,8 +1223,7 @@ $("chatForm").addEventListener("submit", e => {
 });
 $("chatChips").addEventListener("click", e => { if (e.target.tagName === "BUTTON") sendChat(e.target.textContent); });
 
-/* Refresh movie availability while visitors keep the site open.
-   Admin changes become visible automatically without a manual page reload. */
+/* Receive an immediate server-push event after an admin confirms a movie link. */
 let availabilityRefreshRunning = false;
 async function refreshVisibleMovieAvailability() {
   if (availabilityRefreshRunning || document.visibilityState !== "visible") return;
@@ -1274,10 +1273,9 @@ async function refreshVisibleMovieAvailability() {
     availabilityRefreshRunning = false;
   }
 }
-window.setInterval(refreshVisibleMovieAvailability, 10000);
-window.addEventListener("focus", refreshVisibleMovieAvailability);
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") refreshVisibleMovieAvailability();
+const movieEvents = new EventSource("/api/movie-events");
+movieEvents.addEventListener("movie-availability", () => {
+  void refreshVisibleMovieAvailability();
 });
 
 renderAuth();
