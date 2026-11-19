@@ -224,11 +224,11 @@ function posterImg(m) {
 }
 function cardHTML(m, headingLevel = 3) {
   const headingTag = headingLevel === 2 ? "h2" : "h3";
-  // Only mark a card as playable when the public API actually exposes a usable URL.
+  // A movie is available only when the public API exposes a usable video URL.
   const hasVideo = !!safeUrl(m.video_url);
   const href = moviePath(m);
-  return `<a class="card${hasVideo ? " has-video" : ""}" href="${href}" aria-label="${esc(m.title_en)}">
-    <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div></div>
+  return `<a class="card${hasVideo ? " has-video" : " coming-soon"}" href="${href}" aria-label="${esc(m.title_en)}">
+    <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div>${hasVideo ? "" : '<div class="coming-soon-ribbon">ფილმი მალე გახმოვანდება</div>'}</div>
     <${headingTag}>${esc(m.title_en)}</${headingTag}>
     <div class="ka">${esc(m.title_ka || "")}</div>
     <div class="year">${esc(m.release_year || "—")}</div>
