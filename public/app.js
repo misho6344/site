@@ -239,6 +239,25 @@ document.addEventListener("error", (e) => {
   }
 }, true);
 
+const SITE_BANNER_CACHE_KEY = "noadframe:site-banners:v1";
+function readCachedSiteBanners() {
+  try {
+    const value = JSON.parse(localStorage.getItem(SITE_BANNER_CACHE_KEY) || "[]");
+    return Array.isArray(value)
+      ? value.filter(item => item && safeUrl(item.banner_image_url)).slice(0, 12)
+      : [];
+  } catch {
+    return [];
+  }
+}
+function storeCachedSiteBanners(banners) {
+  try {
+    localStorage.setItem(SITE_BANNER_CACHE_KEY, JSON.stringify(banners.slice(0, 12)));
+  } catch {
+    // Storage may be unavailable or full; the live API response remains usable.
+  }
+}
+
 /* ---------- home ---------- */
 async function showHome() {
   const heroRoot = $("hero"), rowsRoot = $("homeRows");
@@ -266,7 +285,13 @@ async function showHome() {
 
   try {
     // Banners load independently so they cannot delay the movie rows or first hero.
-    const bannerPromise = api("/api/site-banners", { cache: "no-store" }).catch(() => ({ banners: [] }));
+    const bannerPromise = api("/api/site-banners", { cache: "no-store" })
+      .then(data => {
+        const banners = Array.isArray(data.banners) ? data.banners : [];
+        storeCachedSiteBanners(banners);
+        return { banners };
+      })
+      .catch(() => ({ banners: readCachedSiteBanners() }));
     const data = await api("/api/movies/categories");
     const popular = Array.isArray(data.popular) ? data.popular : [];
     const topRated = Array.isArray(data.topRated) ? data.topRated : [];
