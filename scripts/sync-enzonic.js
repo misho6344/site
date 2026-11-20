@@ -110,7 +110,9 @@ function main() {
   }
 }
 
-main().catch((error) => {
+try {
+  main();
+} catch (error) {
   console.error(`SYNC_FAILED: ${error.message}`);
   process.exitCode = 1;
-});
+}
