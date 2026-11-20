@@ -7,6 +7,7 @@ on:
       - .github/workflows/account-migration-dry-run.yml
       - scripts/migrate-account-and-empty-tables.js
       - package.json
+      - package-lock.json
   workflow_dispatch:
 
 permissions:
