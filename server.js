@@ -13,6 +13,7 @@ const { UpstashRateLimitStore } = require("./lib/upstash-rate-limit-store");
 const { parsePagination, paginationMeta } = require("./lib/pagination");
 const { SESSION_COOKIE, CSRF_COOKIE, cookieOptions, parseCookies, createResetToken, hashResetToken, csrfMatches, validPassword } = require("./lib/auth-security");
 const { createPool, initSchema, withDatabaseRetry, getTransientConnectionCode } = require("./lib/db");
+const { createFailoverRouter } = require("./lib/database-failover");
 const { upsertMovie, httpError } = require("./lib/movies");
 
 const app = express();
@@ -63,11 +64,6 @@ let lastDatabaseKeepaliveWarningAt = 0;
 const DATABASE_KEEPALIVE_INTERVAL_MS = 2 * 60 * 1000;
 const READ_ONLY_SQL = /^(SELECT|SHOW|DESCRIBE|EXPLAIN)\b/i;
 
-function isReadOnlySql(sql) {
-  const statement = typeof sql === "string" ? sql.trimStart() : String(sql?.sql || "").trimStart();
-  return READ_ONLY_SQL.test(statement) && !/\bFOR\s+(UPDATE|SHARE)\b/i.test(statement);
-}
-
 function isTransientDbFailure(error) {
   return TRANSIENT_STARTUP_ERRORS.has(getTransientConnectionCode(error));
 }
@@ -87,6 +83,7 @@ async function isBackupSnapshotFresh() {
 
 function createFailoverPool() {
   primaryPool = createPool();
+  backupPool = undefined;
   if (process.env.ENZONIC_DATABASE_URL) {
     const originalUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = process.env.ENZONIC_DATABASE_URL;
@@ -94,42 +91,13 @@ function createFailoverPool() {
     finally { process.env.DATABASE_URL = originalUrl; }
   }
 
-  return {
-    async query(sql, ...args) {
-      try {
-        const result = await primaryPool.query(sql, ...args);
-        if (databaseMode !== "primary") {
-          databaseMode = "primary";
-          console.info("[DB] Primary TiDB connection recovered; writes are enabled again.");
-        }
-        return result;
-      } catch (error) {
-        if (!isTransientDbFailure(error) || !backupPool || !isReadOnlySql(sql)) throw error;
-        if (!(await isBackupSnapshotFresh())) {
-          databaseMode = "unavailable";
-          console.error("[DB] TiDB unavailable and Enzonic snapshot is missing or older than 20 minutes; refusing stale fallback.");
-          throw error;
-        }
-        try {
-          const result = await backupPool.query(sql, ...args);
-          if (databaseMode !== "backup-read-only") {
-            databaseMode = "backup-read-only";
-            console.warn("[DB] TiDB unavailable. Serving read-only queries from Enzonic; all writes remain blocked.");
-          }
-          return result;
-        } catch (backupError) {
-          console.error("[DB] Both primary and backup databases are unavailable.", {
-            primary: getTransientConnectionCode(error),
-            backup: getTransientConnectionCode(backupError)
-          });
-          throw error;
-        }
-      }
-    },
-    async end() {
-      await Promise.allSettled([primaryPool?.end(), backupPool?.end()]);
-    }
-  };
+  return createFailoverRouter({
+    primaryPool,
+    backupPool,
+    isTransientDbFailure,
+    isBackupSnapshotFresh,
+    onModeChange: mode => { databaseMode = mode; }
+  });
 }
 
 async function checkBackupConnection() {
