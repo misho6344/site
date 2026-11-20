@@ -228,7 +228,7 @@ function cardHTML(m, headingLevel = 3) {
   const hasVideo = !!safeUrl(m.video_url);
   const href = moviePath(m);
   return `<a class="card${hasVideo ? " has-video" : " coming-soon"}" href="${href}" aria-label="${esc(m.title_en)}">
-    <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div>${hasVideo ? "" : '<div class="coming-soon-ribbon">ფილმი მალე გახმოვანდება</div>'}</div>
+    <div class="poster">${posterImg(m)}${imdbBadge(m)}<div class="play"><span>▶</span></div>${hasVideo ? "" : '<div class="coming-soon-ribbon">SOON</div>'}</div>
     <${headingTag}>${esc(m.title_en)}</${headingTag}>
     <div class="ka">${esc(m.title_ka || "")}</div>
     <div class="year">${esc(m.release_year || "—")}</div>
@@ -1261,7 +1261,7 @@ async function refreshVisibleMovieAvailability() {
       if (!hasVideo && !ribbon) {
         ribbon = document.createElement("div");
         ribbon.className = "coming-soon-ribbon";
-        ribbon.textContent = "ფილმი მალე გახმოვანდება";
+        ribbon.textContent = "SOON";
         poster.appendChild(ribbon);
       } else if (hasVideo && ribbon) {
         ribbon.remove();
