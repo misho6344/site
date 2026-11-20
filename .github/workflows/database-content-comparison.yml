@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/database-content-comparison.yml
+      - scripts/compare-database-content.js
+      - package.json
+      - package-lock.json
 
 permissions:
   contents: read
