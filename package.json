@@ -13,7 +13,8 @@
     "seed": "node scripts/seed.js",
     "preview": "node preview/server.js",
     "test": "node --test",
-    "verify:database-pair": "node scripts/verify-database-pair.js"
+    "verify:database-pair": "node scripts/verify-database-pair.js",
+    "restore:public-catalog": "node scripts/restore-public-catalog.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
