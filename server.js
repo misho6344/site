@@ -61,11 +61,11 @@ let databaseMode = "starting";
 let databaseKeepaliveTimer = null;
 let lastDatabaseKeepaliveWarningAt = 0;
 const DATABASE_KEEPALIVE_INTERVAL_MS = 2 * 60 * 1000;
-const READ_ONLY_SQL = /^(SELECT|SHOW|DESCRIBE|EXPLAIN)\\b/i;
+const READ_ONLY_SQL = /^(SELECT|SHOW|DESCRIBE|EXPLAIN)\b/i;
 
 function isReadOnlySql(sql) {
   const statement = typeof sql === "string" ? sql.trimStart() : String(sql?.sql || "").trimStart();
-  return READ_ONLY_SQL.test(statement) && !/\\bFOR\\s+(UPDATE|SHARE)\\b/i.test(statement);
+  return READ_ONLY_SQL.test(statement) && !/\bFOR\s+(UPDATE|SHARE)\b/i.test(statement);
 }
 
 function isTransientDbFailure(error) {
