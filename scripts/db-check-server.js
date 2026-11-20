@@ -11,7 +11,8 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, mode: "read-only-db-connection-test", checkStatus });
 });
 
-const server = app.listen(port, () => {
+const server = app.listen(port, "0.0.0.0", () => {
+  console.log(`[DB TEST] HTTP server listening on 0.0.0.0:${port}.`);
   console.log("[DB TEST] Isolated connection-test service started. No schema initialization or data writes will run.");
   checkDatabaseConnection()
     .then(result => {
