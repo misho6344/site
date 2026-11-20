@@ -9,6 +9,7 @@ on:
       - package.json
       - package-lock.json
       - scripts/compare-database-content.js
+      - .github/workflows/tidb-readonly-smoke.yml
   workflow_dispatch:
 
 permissions:
