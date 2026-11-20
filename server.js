@@ -81,6 +81,13 @@ const TRANSIENT_STARTUP_ERRORS = new Set([
   "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR"
 ]);
 const production = process.env.NODE_ENV === "production";
+const readOnlyStaging = process.env.NOADFRAME_READ_ONLY_STAGING === "true";
+if (readOnlyStaging) {
+  const target = new URL(process.env.DATABASE_URL || "");
+  if (!target.hostname.endsWith(".tidbcloud.com") || Number(target.port) !== 4000 || decodeURIComponent(target.pathname.slice(1)) !== "noadframe") {
+    throw new Error("Read-only staging requires the NoAdFrame TiDB Cloud database on port 4000.");
+  }
+}
 const trustProxyHops = process.env.TRUST_PROXY_HOPS === undefined
   ? (production ? 1 : 0)
   : Number(process.env.TRUST_PROXY_HOPS);
@@ -134,6 +141,14 @@ const clientErrorReportLimiter = limiter("client-errors", 60 * 1000, 10, "Too ma
 
 app.use(globalLimiter);
 app.use("/api", apiLimiter);
+if (readOnlyStaging) {
+  app.use((req, res, next) => {
+    if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+      return res.status(405).json({ error: "This staging environment is read-only. Database changes are disabled." });
+    }
+    next();
+  });
+}
 
 const originAccessToken = process.env.ORIGIN_ACCESS_TOKEN || "";
 if (originAccessToken && originAccessToken.length < 32) {
@@ -1118,7 +1133,24 @@ app.use((error, req, res, next) => {
 
 async function initializeDatabase(server) {
   try {
-    // All operations in this block are safe to re-run (IF NOT EXISTS, INSERT IGNORE, or conditional UPDATE).
+    if (readOnlyStaging) {
+      await withDatabaseRetry(async () => {
+        const [[identity]] = await pool.query("SELECT DATABASE() AS databaseName, VERSION() AS serverVersion");
+        if (identity.databaseName !== "noadframe" || !String(identity.serverVersion).includes("TiDB")) {
+          throw new Error("Read-only staging connected to an unexpected database.");
+        }
+        const [tables] = await pool.query("SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'");
+        const found = new Set(tables.map(row => row.TABLE_NAME));
+        const required = ["movies", "users", "comments", "ai_feedback", "copyright_reports", "site_banner", "site_banners", "site_home_sections", "admin_security_events"];
+        const missing = required.filter(name => !found.has(name));
+        if (missing.length) throw new Error("Read-only staging is missing required tables: " + missing.join(", "));
+      }, "read-only staging database verification");
+      databaseReady = true;
+      startDatabaseKeepalive();
+      console.log("[STAGING READ-ONLY] TiDB verified; schema initialization and all HTTP mutations are disabled.");
+      return;
+    }
+    // Production initialization path. Staging read-only mode exits above before any DDL or data changes.
     await withDatabaseRetry(async () => {
       await initSchema(pool);
       await pool.query("CREATE TABLE IF NOT EXISTS site_banner (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, image_url TEXT NULL, image_data MEDIUMBLOB NULL, mime_type VARCHAR(32) NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
