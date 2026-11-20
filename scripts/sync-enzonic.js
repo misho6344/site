@@ -10,7 +10,7 @@ function connectionFromUrl(value, label) {
   if (!value) throw new Error(`Missing ${label} secret.`);
   const url = new URL(value);
   if (url.protocol !== 'mysql:') throw new Error(`${label} must use a mysql:// URL.`);
-  const database = decodeURIComponent(url.pathname.replace(/^\\//, ''));
+  const database = decodeURIComponent(url.pathname.slice(1));
   if (!url.hostname || !url.username || !database) throw new Error(`${label} is missing host, username, or database.`);
   return {
     host: url.hostname,
