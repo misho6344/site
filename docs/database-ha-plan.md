@@ -86,7 +86,11 @@ Use a transactional outbox/change-log pattern on the primary. Each application m
 
 ## Verification helper
 
-Run `npm run verify:database-pair` only with `PRIMARY_DATABASE_URL` and `SECONDARY_DATABASE_URL` set in a secure local environment. The current helper checks table schemas and row counts only. This is a preliminary check, not proof of identical data. Before cutover, it must be extended with primary-key coverage and deterministic, chunked row hashes over all columns, including blobs, followed by application smoke tests and backup/restore validation.
+Run `npm run verify:database-pair` only with `PRIMARY_DATABASE_URL` and `SECONDARY_DATABASE_URL` set in a secure environment. The current helper opens consistent read snapshots, inventories every base table, checks ordered primary-key definitions and column metadata, and computes deterministic SHA-256 hashes over every row and column (including binary/blob values). It fails on missing/extra tables, row-count differences, schema-column differences, primary-key differences, or data-hash differences. Both databases must be quiesced during the comparison so the snapshots represent the same logical point in time.
+
+This helper is read-only. It does not export, import, replicate, compare every secondary index/foreign-key/trigger/routine definition, prove a backup is restorable, or authorize cutover. A successful result is one verification gate only; independent encrypted backup/restore testing and application smoke tests remain mandatory.
+
+The application-owned tables identified in the current code include `users`, `movies`, `comments`, `ai_feedback`, `site_banner`, `site_banners`, `site_home_sections`, and `admin_security_events`. This is an observed inventory, not a hard-coded allowlist: the verifier enumerates all base tables dynamically so newly added tables are not silently skipped.
 
 ## Required acceptance gates
 
