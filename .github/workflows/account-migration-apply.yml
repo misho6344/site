@@ -1,0 +1,36 @@
+name: Copy Enzonic account data to TiDB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/account-migration-apply.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noadframe-account-migration-apply
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Copy missing account and application rows only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/tidb-primary-enzonic-secondary
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Copy selected rows and verify hashes
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.SOURCE_DATABASE_URL }}
+          RESTORE_DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          APPLY_MIGRATION: "true"
+        run: npm run migrate:accounts:dry-run
