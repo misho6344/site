@@ -317,8 +317,8 @@ async function showHome() {
     heroRoot.innerHTML = fallback.length ? heroHTML(fallback) : heroEmptyHTML();
 
     const sections = [
-      ["Popular Movies", popular, "popular"],
       ["Top Rated", topRated, "rating"],
+      ["Popular Movies", popular, "popular"],
       ["New Releases", newReleases, "year"]
     ];
     rowsRoot.innerHTML = sections.filter(([, list]) => list.length).map(([title, list, sort]) => `
