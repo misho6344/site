@@ -1,0 +1,36 @@
+name: TiDB missing application schema (dry run)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tidb-schema-dry-run.yml
+      - scripts/ensure-missing-app-schema.js
+      - package.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noadframe-tidb-schema-dry-run
+  cancel-in-progress: false
+
+jobs:
+  schema-dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/tidb-primary-enzonic-secondary
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Inspect missing tables without changing schema
+        env:
+          RESTORE_DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          APPLY_SCHEMA: "false"
+        run: npm run schema:prepare
