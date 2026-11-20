@@ -2688,14 +2688,14 @@ body {
 /* Grey out movies that do not have a playable video link yet. */
 .card.coming-soon .poster img {
   filter: none;
-  opacity: .58;
+  opacity: 1;
 }
 .card.coming-soon .poster::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: rgba(12, 13, 15, .22);
+  background: transparent;
 }
 .card.coming-soon .play {
   display: none;
