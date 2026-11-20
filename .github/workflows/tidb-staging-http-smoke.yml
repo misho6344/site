@@ -1,0 +1,52 @@
+name: TiDB staging HTTP smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tidb-staging-http-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noadframe-tidb-staging-http-smoke
+  cancel-in-progress: false
+
+jobs:
+  http-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify public staging endpoints (GET only)
+        env:
+          STAGING_URL: https://noadframe-tidb-test.onrender.com
+        run: |
+          node --input-type=module <<'NODE'
+          const base = process.env.STAGING_URL;
+          const checks = [
+            ["/api/health", data => data.ok === true && data.database === "ready"],
+            ["/api/ready", data => data.status === "ready" && data.database === "connected"],
+            ["/api/movies?limit=3", data => Array.isArray(data.movies) && Number(data.total) >= 1],
+            ["/api/movies/categories", data => Array.isArray(data.popular) && Array.isArray(data.topRated) && Array.isArray(data.newReleases)],
+            ["/api/genres", data => Array.isArray(data.genres) && Array.isArray(data.years)],
+            ["/api/site-banner", data => typeof data.active === "boolean" && typeof data.imageUrl === "string"],
+            ["/api/site-banners", data => Array.isArray(data.banners)]
+          ];
+          for (const [path, validate] of checks) {
+            let response;
+            for (let attempt = 0; attempt < 6; attempt++) {
+              try {
+                response = await fetch(base + path, { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(12000) });
+                if (response.ok) break;
+              } catch {}
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+            if (!response || !response.ok) throw new Error(path + " returned " + (response?.status || "no response"));
+            const data = await response.json();
+            if (!validate(data)) throw new Error(path + " returned an unexpected response shape");
+            console.log("PASS GET", path, response.status);
+          }
+          console.log("PASS: all staging HTTP checks completed using GET requests only.");
+          NODE
