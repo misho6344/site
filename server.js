@@ -54,22 +54,94 @@ function seoShell({title,description,path,image,graph,body="",noindex=false,ogTy
 }
 
 let pool;
+let primaryPool;
+let backupPool;
 let databaseReady = false;
+let databaseMode = "starting";
 let databaseKeepaliveTimer = null;
 let lastDatabaseKeepaliveWarningAt = 0;
 const DATABASE_KEEPALIVE_INTERVAL_MS = 2 * 60 * 1000;
+const READ_ONLY_SQL = /^(SELECT|SHOW|DESCRIBE|EXPLAIN)\\b/i;
+
+function isReadOnlySql(sql) {
+  const statement = typeof sql === "string" ? sql.trimStart() : String(sql?.sql || "").trimStart();
+  return READ_ONLY_SQL.test(statement) && !/\\bFOR\\s+(UPDATE|SHARE)\\b/i.test(statement);
+}
+
+function isTransientDbFailure(error) {
+  return TRANSIENT_STARTUP_ERRORS.has(getTransientConnectionCode(error));
+}
+
+function createFailoverPool() {
+  primaryPool = createPool();
+  if (process.env.ENZONIC_DATABASE_URL) {
+    const originalUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = process.env.ENZONIC_DATABASE_URL;
+    try { backupPool = createPool(); }
+    finally { process.env.DATABASE_URL = originalUrl; }
+  }
+
+  return {
+    async query(sql, ...args) {
+      try {
+        const result = await primaryPool.query(sql, ...args);
+        if (databaseMode !== "primary") {
+          databaseMode = "primary";
+          console.info("[DB] Primary TiDB connection recovered; writes are enabled again.");
+        }
+        return result;
+      } catch (error) {
+        if (!isTransientDbFailure(error) || !backupPool || !isReadOnlySql(sql)) throw error;
+        try {
+          const result = await backupPool.query(sql, ...args);
+          if (databaseMode !== "backup-read-only") {
+            databaseMode = "backup-read-only";
+            console.warn("[DB] TiDB unavailable. Serving read-only queries from Enzonic; all writes remain blocked.");
+          }
+          return result;
+        } catch (backupError) {
+          console.error("[DB] Both primary and backup databases are unavailable.", {
+            primary: getTransientConnectionCode(error),
+            backup: getTransientConnectionCode(backupError)
+          });
+          throw error;
+        }
+      }
+    },
+    async end() {
+      await Promise.allSettled([primaryPool?.end(), backupPool?.end()]);
+    }
+  };
+}
 
 function startDatabaseKeepalive() {
   if (databaseKeepaliveTimer) return;
   databaseKeepaliveTimer = setInterval(async () => {
     try {
-      await pool.query("SELECT 1");
+      await primaryPool.query("SELECT 1");
+      if (databaseMode !== "primary") {
+        databaseMode = "primary";
+        console.info("[DB] Primary TiDB connection recovered; primary mode restored.");
+      }
     } catch (error) {
       const now = Date.now();
-      if (now - lastDatabaseKeepaliveWarningAt >= 60_000) {
-        const code = String(error?.code || "UNKNOWN").toUpperCase();
-        console.warn("[DB] Keep-alive check failed; database may be sleeping or unreachable.", { code });
-        lastDatabaseKeepaliveWarningAt = now;
+      if (isTransientDbFailure(error) && backupPool) {
+        try {
+          await backupPool.query("SELECT 1");
+          databaseMode = "backup-read-only";
+          if (now - lastDatabaseKeepaliveWarningAt >= 60_000) {
+            console.warn("[DB] TiDB is unreachable; Enzonic read-only fallback is healthy.");
+            lastDatabaseKeepaliveWarningAt = now;
+          }
+        } catch (backupError) {
+          databaseMode = "unavailable";
+          console.error("[DB] Primary and backup keep-alive checks failed.", {
+            primary: getTransientConnectionCode(error),
+            backup: getTransientConnectionCode(backupError)
+          });
+        }
+      } else {
+        console.warn("[DB] Primary keep-alive check failed.", { code: getTransientConnectionCode(error) });
       }
     }
   }, DATABASE_KEEPALIVE_INTERVAL_MS);
@@ -1145,7 +1217,7 @@ async function initializeDatabase(server) {
 }
 
 async function start() {
-  pool = createPool();
+  pool = createFailoverPool();
   try {
     const target = new URL(process.env.DATABASE_URL);
     console.info("[DB] Connection target", { host: target.hostname, port: target.port || "3306", tls: String(process.env.DB_SSL || "true").toLowerCase() !== "false" });
