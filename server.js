@@ -1046,6 +1046,14 @@ const SITEMAP_INDEX_OPEN = '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapinde
 function sitemapUrlEntry(route) {
   return "<url><loc>" + seoEsc(seoUrl(route)) + "</loc></url>";
 }
+function sitemapMovieEntry(movie) {
+  const route = "/movies/" + movie.id + "/" + seoSlug(movie.title_en);
+  const createdAt = movie.created_at ? new Date(movie.created_at) : null;
+  const lastmod = createdAt && Number.isFinite(createdAt.getTime())
+    ? "<lastmod>" + createdAt.toISOString().slice(0, 10) + "</lastmod>"
+    : "";
+  return "<url><loc>" + seoEsc(seoUrl(route)) + "</loc>" + lastmod + "</url>";
+}
 function sendSitemap(res, entries) {
   res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
   res.type("application/xml").send(SITEMAP_URLSET_OPEN + entries.join("") + "</urlset>");
@@ -1060,10 +1068,10 @@ app.get("/sitemap.xml", wrap(async (_req, res) => {
   const pageCount = Math.max(1, Math.ceil(total / SITEMAP_MOVIE_BATCH_SIZE));
 
   if (pageCount === 1) {
-    const [rows] = await pool.query("SELECT id, title_en FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id");
+    const [rows] = await pool.query("SELECT id, title_en, created_at FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id");
     const entries = [
       ...SITEMAP_STATIC_ROUTES.map(sitemapUrlEntry),
-      ...rows.map(movie => sitemapUrlEntry("/movies/" + movie.id + "/" + seoSlug(movie.title_en)))
+      ...rows.map(sitemapMovieEntry)
     ];
     return sendSitemap(res, entries);
   }
@@ -1084,11 +1092,11 @@ app.get(/^\/sitemap-movies-(\d+)\.xml$/, wrap(async (req, res) => {
   if (!Number.isSafeInteger(page) || page < 1) return res.status(404).type("text/plain").send("Sitemap page not found.");
   const offset = (page - 1) * SITEMAP_MOVIE_BATCH_SIZE;
   const [rows] = await pool.query(
-    "SELECT id, title_en FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id LIMIT ? OFFSET ?",
+    "SELECT id, title_en, created_at FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id LIMIT ? OFFSET ?",
     [SITEMAP_MOVIE_BATCH_SIZE, offset]
   );
   if (!rows.length) return res.status(404).type("text/plain").send("Sitemap page not found.");
-  sendSitemap(res, rows.map(movie => sitemapUrlEntry("/movies/" + movie.id + "/" + seoSlug(movie.title_en))));
+  sendSitemap(res, rows.map(sitemapMovieEntry));
 }));
 app.get("/movies/:id/:slug?", wrap(async (req, res) => {
   if (!/^[1-9][0-9]*$/.test(req.params.id)) {
