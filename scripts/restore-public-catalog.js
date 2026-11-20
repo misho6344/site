@@ -18,7 +18,7 @@ function getTargetConfig() {
   if (!url.hostname.endsWith("tidbcloud.com") || Number(url.port || 3306) !== 4000) {
     throw new Error("Safety stop: restore target must be a TiDB Cloud endpoint on port 4000.");
   }
-  const database = decodeURIComponent(url.pathname.replace(/^\\//, ""));
+  const database = decodeURIComponent(url.pathname.slice(1));
   if (database !== "noadframe") throw new Error("Safety stop: expected the dedicated TiDB database named noadframe.");
   return {
     uri: raw,
@@ -38,7 +38,7 @@ async function main() {
   let failed = 0;
   try {
     const schema = fs.readFileSync(path.join(__dirname, "..", "sql", "schema.sql"), "utf8");
-    for (const statement of schema.split(/;\\s*(?:\\r?\\n|$)/).map(s => s.trim()).filter(Boolean)) {
+    for (const statement of schema.split(";").map(s => s.trim()).filter(Boolean)) { {
       await connection.query(statement); // CREATE TABLE IF NOT EXISTS only; no DROP/TRUNCATE.
     }
 
