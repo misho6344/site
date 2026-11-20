@@ -13,6 +13,7 @@
     "seed": "node scripts/seed.js",
     "preview": "node preview/server.js",
     "test": "node --test",
+    "inventory:full": "node scripts/inventory-full-database.js",
     "verify:database-pair": "node scripts/verify-database-pair.js",
     "restore:public-catalog": "node scripts/restore-public-catalog.js"
   },
