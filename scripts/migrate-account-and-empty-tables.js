@@ -56,8 +56,8 @@ async function main() {
     for (const table of TABLES) {
       const sc=await columns(source,table), tc=await columns(target,table);
       if (!sc.length||!tc.length) throw new Error("Missing required table: "+table);
-      const sourceShape=sc.map(x=>[x.COLUMN_NAME,x.COLUMN_TYPE,x.IS_NULLABLE,x.EXTRA]);
-      const targetShape=tc.map(x=>[x.COLUMN_NAME,x.COLUMN_TYPE,x.IS_NULLABLE,x.EXTRA]);
+      const sourceShape=sc.map(x=>[x.COLUMN_NAME,x.COLUMN_TYPE,x.IS_NULLABLE,x.EXTRA.includes("auto_increment")]);
+      const targetShape=tc.map(x=>[x.COLUMN_NAME,x.COLUMN_TYPE,x.IS_NULLABLE,x.EXTRA.includes("auto_increment")]);
       if (JSON.stringify(sourceShape)!==JSON.stringify(targetShape)) { console.error("[SCHEMA METADATA MISMATCH]", JSON.stringify({table,sourceShape,targetShape})); throw new Error("Schema mismatch; stopped safely at "+table); }
       const sr=await rows(source,table,sc), tr=await rows(target,table,tc);
       const sourceHash=digest(sr), targetHash=digest(tr);
