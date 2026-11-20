@@ -334,7 +334,7 @@ app.use("/api", (req, res, next) => {
 });
 
 app.get("/api/health", healthLimiter, (_req, res) => {
-  res.json({ ok: true, database: databaseReady ? "ready" : "warming" });
+  res.json({ ok: true, database: databaseReady ? "ready" : "warming", databaseMode, backupConfigured: Boolean(process.env.ENZONIC_DATABASE_URL) });
 });
 
 
