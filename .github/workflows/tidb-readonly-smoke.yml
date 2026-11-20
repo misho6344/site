@@ -8,6 +8,7 @@ on:
       - scripts/smoke-test-tidb.js
       - package.json
       - package-lock.json
+      - scripts/compare-database-content.js
   workflow_dispatch:
 
 permissions:
