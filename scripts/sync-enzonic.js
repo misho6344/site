@@ -43,14 +43,19 @@ function run(command, args, options = {}) {
 }
 
 function waitForDatabase(config, label) {
+  let lastError = 'No connection details were returned by the MySQL client.';
   for (let attempt = 1; attempt <= 12; attempt += 1) {
     const result = spawnSync('mysql', [
       `--defaults-extra-file=${config}`, '--batch', '--skip-column-names',
       '-e', 'SELECT 1'
-    ], { encoding: 'utf8', stdio: 'ignore' });
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     if (result.status === 0) return;
-    if (attempt === 12) throw new Error(`${label} did not become available after 12 attempts.`);
-    console.log(`${label} is waking up; retry ${attempt}/12 in 10 seconds.`);
+
+    lastError = (result.stderr || result.error?.message || `mysql exited with status ${result.status}`).trim();
+    if (attempt === 12) {
+      throw new Error(`${label} connection failed after 12 attempts. Last MySQL error: ${lastError}`);
+    }
+    console.log(`${label} connection failed; retry ${attempt}/12 in 10 seconds.`);
     spawnSync('sleep', ['10']);
   }
 }
