@@ -1,7 +1,14 @@
 /* Small stale-while-revalidate cache for public catalog GET endpoints. */
 (() => {
   "use strict";
-  const PREFIX = "noadframe_api_cache_v2:";
+  const PREFIX = "noadframe_api_cache_v3:";
+  // Remove the previous catalog cache so stale ordering/data cannot survive the release.
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("noadframe_api_cache_v2:")) localStorage.removeItem(key);
+    }
+  } catch { /* Storage may be unavailable; the new cache namespace still bypasses old entries. */ }
   const TTL_MS = 10 * 60 * 1000;
   const originalFetch = window.fetch.bind(window);
   const refreshing = new Map();
