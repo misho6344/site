@@ -104,7 +104,14 @@ function main() {
       '--batch', '--skip-column-names', '-e',
       "SELECT CONCAT('TABLES_OK=', COUNT(*)) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
     ]);
-    console.log('SYNC_OK: Enzonic secondary database refreshed successfully.');
+
+    console.log('Recording the verified snapshot timestamp...');
+    run('mysql', [
+      `--defaults-extra-file=${targetConfig}`, '--database', target.database,
+      '-e',
+      "CREATE TABLE IF NOT EXISTS noadframe_replication_status (id TINYINT UNSIGNED NOT NULL PRIMARY KEY, last_successful_sync DATETIME NOT NULL) ENGINE=InnoDB; INSERT INTO noadframe_replication_status (id, last_successful_sync) VALUES (1, UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE last_successful_sync = VALUES(last_successful_sync);"
+    ]);
+    console.log('SYNC_OK: Enzonic secondary database refreshed and timestamp recorded.');
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
