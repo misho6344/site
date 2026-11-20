@@ -2687,7 +2687,7 @@ body {
 
 /* Grey out movies that do not have a playable video link yet. */
 .card.coming-soon .poster img {
-  filter: grayscale(1);
+  filter: none;
   opacity: .58;
 }
 .card.coming-soon .poster::after {
