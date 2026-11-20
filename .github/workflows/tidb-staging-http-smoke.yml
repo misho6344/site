@@ -48,5 +48,8 @@ jobs:
             if (!validate(data)) throw new Error(path + " returned an unexpected response shape");
             console.log("PASS GET", path, response.status);
           }
-          console.log("PASS: all staging HTTP checks completed using GET requests only.");
+          const blocked = await fetch(base + "/api/client-errors", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(12000) });
+          if (blocked.status !== 405) throw new Error("Read-only write guard expected HTTP 405, got " + blocked.status);
+          console.log("PASS POST /api/client-errors blocked with HTTP 405.");
+          console.log("PASS: all staging HTTP checks completed; no database writes were performed.");
           NODE
