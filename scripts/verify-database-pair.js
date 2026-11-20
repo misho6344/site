@@ -32,7 +32,7 @@ async function inspectDatabase(label, config) {
     );
     const result = new Map();
     for (const { tableName } of tables) {
-      const safeName = String(tableName).replace(/[`]/g, "```");
+      const safeName = String(tableName).replace(/`/g, "``");
       const [[count]] = await connection.query(`SELECT COUNT(*) AS rowCount FROM \`${safeName}\``);
       const [columns] = await connection.query(
         "SELECT COLUMN_NAME AS columnName, COLUMN_TYPE AS columnType, IS_NULLABLE AS isNullable, EXTRA AS extra FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? ORDER BY ORDINAL_POSITION",
