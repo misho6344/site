@@ -72,6 +72,19 @@ function isTransientDbFailure(error) {
   return TRANSIENT_STARTUP_ERRORS.has(getTransientConnectionCode(error));
 }
 
+async function isBackupSnapshotFresh() {
+  if (!backupPool) return false;
+  try {
+    const [rows] = await backupPool.query(
+      "SELECT TIMESTAMPDIFF(SECOND, last_successful_sync, UTC_TIMESTAMP()) AS age_seconds FROM noadframe_replication_status WHERE id = 1 LIMIT 1"
+    );
+    const ageSeconds = Number(rows?.[0]?.age_seconds);
+    return Number.isFinite(ageSeconds) && ageSeconds >= 0 && ageSeconds <= 1200;
+  } catch {
+    return false;
+  }
+}
+
 function createFailoverPool() {
   primaryPool = createPool();
   if (process.env.ENZONIC_DATABASE_URL) {
@@ -92,6 +105,11 @@ function createFailoverPool() {
         return result;
       } catch (error) {
         if (!isTransientDbFailure(error) || !backupPool || !isReadOnlySql(sql)) throw error;
+        if (!(await isBackupSnapshotFresh())) {
+          databaseMode = "unavailable";
+          console.error("[DB] TiDB unavailable and Enzonic snapshot is missing or older than 20 minutes; refusing stale fallback.");
+          throw error;
+        }
         try {
           const result = await backupPool.query(sql, ...args);
           if (databaseMode !== "backup-read-only") {
@@ -127,7 +145,10 @@ function startDatabaseKeepalive() {
       const now = Date.now();
       if (isTransientDbFailure(error) && backupPool) {
         try {
-          await backupPool.query("SELECT 1");
+          if (!(await isBackupSnapshotFresh())) {
+            databaseMode = "unavailable";
+            throw new Error("Enzonic snapshot is missing or older than 20 minutes.");
+          }
           databaseMode = "backup-read-only";
           if (now - lastDatabaseKeepaliveWarningAt >= 60_000) {
             console.warn("[DB] TiDB is unreachable; Enzonic read-only fallback is healthy.");
