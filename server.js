@@ -132,6 +132,25 @@ function createFailoverPool() {
   };
 }
 
+async function checkBackupConnection() {
+  if (!backupPool) {
+    console.warn("[DB] Enzonic backup is not configured; read-only failover is disabled.");
+    return;
+  }
+  try {
+    await backupPool.query("SELECT 1");
+    const fresh = await isBackupSnapshotFresh();
+    console.info("[DB] Enzonic backup connection verified.", {
+      snapshotFresh: fresh,
+      maxSnapshotAgeSeconds: 1200
+    });
+  } catch (error) {
+    console.error("[DB] Enzonic backup connection check failed.", {
+      code: getTransientConnectionCode(error) || "BACKUP_CONNECTION_ERROR"
+    });
+  }
+}
+
 function startDatabaseKeepalive() {
   if (databaseKeepaliveTimer) return;
   databaseKeepaliveTimer = setInterval(async () => {
