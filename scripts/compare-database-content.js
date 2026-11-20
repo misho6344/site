@@ -18,7 +18,7 @@ async function inspect(label,cfg){
   const result={label,database:cfg.database,tables:{}};
   for(const {name} of tables){
    const [[count]]=await db.query("SELECT COUNT(*) count FROM "+mysql.escapeId(name));
-   if(name==="admin_security_events"){result.tables[name]={rowCount:String(count.count),contentHashSkipped:"historical security events intentionally excluded"};continue;}
+   if(name==="admin_security_events"){const [ddlRows]=await db.query("SHOW CREATE TABLE "+mysql.escapeId(name)); result.tables[name]={rowCount:String(count.count),ddl:ddlRows[0]["Create Table"],contentHashSkipped:"historical security events intentionally excluded"};continue;}
    const [ddlRows]=await db.query("SHOW CREATE TABLE "+mysql.escapeId(name));
    const ddl=ddlRows[0]["Create Table"];
    const [pk]=await db.query("SELECT COLUMN_NAME name FROM information_schema.key_column_usage WHERE table_schema=DATABASE() AND table_name=? AND CONSTRAINT_NAME='PRIMARY' ORDER BY ORDINAL_POSITION",[name]);
@@ -27,7 +27,7 @@ async function inspect(label,cfg){
    const [rows]=await db.query("SELECT * FROM "+mysql.escapeId(name)+" ORDER BY "+order);
    const hash=crypto.createHash("sha256");
    for(const row of rows){const clean={};for(const key of Object.keys(row))clean[key]=norm(row[key]);hash.update(JSON.stringify(clean));hash.update("\n");}
-   result.tables[name]={rowCount:String(count.count),ddlSha256:crypto.createHash("sha256").update(ddl).digest("hex"),rowsSha256:hash.digest("hex"),primaryKey:pk.map(x=>x.name)};
+   result.tables[name]={rowCount:String(count.count),ddl,ddlSha256:crypto.createHash("sha256").update(ddl).digest("hex"),rowsSha256:hash.digest("hex"),primaryKey:pk.map(x=>x.name)};
   }
   return result;
  }finally{await db.end();}
