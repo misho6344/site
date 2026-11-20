@@ -1,0 +1,35 @@
+name: Enzonic to TiDB account migration (dry run)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/account-migration-dry-run.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noadframe-account-migration-dry-run
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/tidb-primary-enzonic-secondary
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compare account and empty-table data without writes
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.SOURCE_DATABASE_URL }}
+          RESTORE_DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          APPLY_MIGRATION: "false"
+        run: npm run migrate:accounts:dry-run
