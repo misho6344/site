@@ -5,11 +5,12 @@ const { createFailoverRouter, isReadOnlySql } = require("../lib/database-failove
 const offline = () => Object.assign(new Error("connection lost"), { code: "ECONNRESET" });
 const quietLogger = { info() {}, warn() {}, error() {} };
 
-function fixture({ primaryFails = false, backupFresh = true, backupFails = false } = {}) {
+function fixture({ primaryFails = false, primaryError = null, backupFresh = true, backupFails = false } = {}) {
   const calls = { primary: [], backup: [], modes: [] };
   const primaryPool = {
     async query(sql, ...args) {
       calls.primary.push({ sql, args });
+      if (primaryError) throw primaryError;
       if (primaryFails) throw offline();
       return [{ source: "primary" }];
     },
@@ -110,11 +111,8 @@ test("returns to primary after recovery and allows writes there", async () => {
 });
 
 test("does not fallback on non-connection SQL errors", async () => {
-  const { router, calls } = fixture();
   const sqlError = Object.assign(new Error("bad SQL"), { code: "ER_PARSE_ERROR" });
-  router.query = async (sql) => {
-    throw sqlError;
-  };
+  const { router, calls } = fixture({ primaryError: sqlError });
   await assert.rejects(router.query("SELECT broken"), { code: "ER_PARSE_ERROR" });
   assert.equal(calls.backup.length, 0);
 });
