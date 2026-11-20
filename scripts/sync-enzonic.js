@@ -85,8 +85,11 @@ function main() {
       '--no-tablespaces', '--column-statistics=0', '--set-gtid-purged=OFF',
       source.database
     ], { encoding: 'utf8', maxBuffer: 1024 * 1024 * 128 });
-    if (dump.error) throw dump.error;
-    if (dump.status !== 0) throw new Error('Primary database export failed.');
+    if (dump.error) throw new Error(`Primary database export could not start: ${dump.error.message}`);
+    if (dump.status !== 0) {
+      const details = (dump.stderr || '').trim() || `mysqldump exited with status ${dump.status}`;
+      throw new Error(`Primary database export failed: ${details}`);
+    }
     if (!dump.stdout || dump.stdout.trim().length < 100) throw new Error('Database export was empty or unexpectedly small.');
     fs.writeFileSync(dumpFile, dump.stdout, { mode: 0o600 });
 
