@@ -25,6 +25,9 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const base = process.env.STAGING_URL;
+          const sitePage = await fetch(base + "/", { signal: AbortSignal.timeout(12000) });
+          if (!sitePage.ok || !(sitePage.headers.get("content-type") || "").includes("text/html")) throw new Error("Staging site homepage did not return HTML");
+          console.log("PASS staging site homepage", sitePage.status);
           const checks = [
             ["/api/health", data => data.ok === true && data.database === "ready"],
             ["/api/ready", data => data.status === "ready" && data.database === "connected"],
