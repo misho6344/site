@@ -9,6 +9,7 @@ on:
       - scripts/compare-database-content.js
       - package.json
       - package-lock.json
+      - scripts/ensure-missing-app-schema.js
 
 permissions:
   contents: read
