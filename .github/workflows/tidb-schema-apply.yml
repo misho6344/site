@@ -1,0 +1,38 @@
+name: Create missing TiDB application tables
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tidb-schema-apply.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noadframe-tidb-schema-apply
+  cancel-in-progress: false
+
+jobs:
+  create-missing-tables:
+    name: Create only missing tables in TiDB
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/tidb-primary-enzonic-secondary
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Create missing tables only
+        env:
+          RESTORE_DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          APPLY_SCHEMA: "true"
+        run: npm run schema:prepare
