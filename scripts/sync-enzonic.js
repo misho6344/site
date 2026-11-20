@@ -76,10 +76,10 @@ function main() {
     console.log('Checking Enzonic secondary connection...');
     waitForDatabase(targetConfig, 'Enzonic secondary');
 
-    console.log('Creating a consistent database snapshot...');
+    console.log('Exporting primary database without table locks...');
     const dump = spawnSync('mysqldump', [
       `--defaults-extra-file=${sourceConfig}`,
-      '--single-transaction', '--quick', '--skip-lock-tables',
+      '--quick', '--skip-lock-tables',
       '--routines', '--triggers', '--events', '--hex-blob',
       '--no-tablespaces', '--column-statistics=0', '--set-gtid-purged=OFF',
       source.database
