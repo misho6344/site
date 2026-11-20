@@ -35,6 +35,10 @@ function canonicalValue(value) {
   if (Buffer.isBuffer(value)) return ["buffer", value.toString("base64")];
   if (value instanceof Date) return ["date", value.toISOString()];
   if (typeof value === "bigint") return ["bigint", value.toString()];
+  if (Array.isArray(value)) return ["array", value.map(canonicalValue)];
+  if (typeof value === "object") {
+    return ["object", Object.keys(value).sort().map(key => [key, canonicalValue(value[key])])];
+  }
   return [typeof value, String(value)];
 }
 
