@@ -38,7 +38,7 @@ async function main() {
   let failed = 0;
   try {
     const schema = fs.readFileSync(path.join(__dirname, "..", "sql", "schema.sql"), "utf8");
-    for (const statement of schema.split(";").map(s => s.trim()).filter(Boolean)) { {
+    for (const statement of schema.split(";").map(s => s.trim()).filter(Boolean)) {
       await connection.query(statement); // CREATE TABLE IF NOT EXISTS only; no DROP/TRUNCATE.
     }
 
