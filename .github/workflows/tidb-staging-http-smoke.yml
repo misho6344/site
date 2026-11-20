@@ -51,5 +51,15 @@ jobs:
           const blocked = await fetch(base + "/api/client-errors", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(12000) });
           if (blocked.status !== 405) throw new Error("Read-only write guard expected HTTP 405, got " + blocked.status);
           console.log("PASS POST /api/client-errors blocked with HTTP 405.");
-          console.log("PASS: all staging HTTP checks completed; no database writes were performed.");
+          const adminBase = "https://noadframe-admin-staging.onrender.com";
+          const adminPage = await fetch(adminBase + "/", { signal: AbortSignal.timeout(12000) });
+          if (!adminPage.ok) throw new Error("Admin staging page returned " + adminPage.status);
+          console.log("PASS Admin Panel staging page", adminPage.status);
+          const csrfResponse = await fetch(adminBase + "/api/csrf", { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(12000) });
+          if (!csrfResponse.ok || typeof (await csrfResponse.json()).csrfToken !== "string") throw new Error("Admin staging CSRF endpoint failed");
+          console.log("PASS Admin Panel CSRF endpoint", csrfResponse.status);
+          const protectedEvents = await fetch(adminBase + "/api/security/events", { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(12000) });
+          if (protectedEvents.status !== 401) throw new Error("Admin security events should require authentication; got " + protectedEvents.status);
+          console.log("PASS Admin security events remain authentication-protected", protectedEvents.status);
+          console.log("PASS: staging HTTP checks completed; no database writes were performed.");
           NODE
