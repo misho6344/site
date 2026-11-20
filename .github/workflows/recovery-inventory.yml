@@ -19,8 +19,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install database driver
-        run: npm install --no-save mysql2@^3.14.0
+      - name: Install locked project dependencies
+        run: npm ci
       - name: Read-only inventory of selected recovery data
         env:
           SOURCE_DATABASE_URL: ${{ secrets.SOURCE_DATABASE_URL }}
