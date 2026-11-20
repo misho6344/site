@@ -7,7 +7,7 @@ function config(envName, suffix, port) {
   if(url.protocol!=="mysql:" || !url.hostname.endsWith(suffix) || Number(url.port||3306)!==port) throw new Error("Safety stop: unexpected endpoint for "+envName);
   const mode=(url.searchParams.get("ssl-mode")||"REQUIRED").toUpperCase();
   if(!["REQUIRED","VERIFY_IDENTITY"].includes(mode)) throw new Error("TLS is required");
-  const database=decodeURIComponent(url.pathname.replace(/^\\//,"")); if(!database) throw new Error("Database name missing");
+  const database=decodeURIComponent(url.pathname.slice(1)); if(!database) throw new Error("Database name missing");
   return {host:url.hostname,port,user:decodeURIComponent(url.username),password:decodeURIComponent(url.password),database,ssl:{rejectUnauthorized:true},connectTimeout:20000,supportBigNumbers:true,bigNumberStrings:true,dateStrings:true};
 }
 function norm(v){if(Buffer.isBuffer(v))return {$binary:v.toString("base64")};if(v instanceof Date)return {$date:v.toISOString()};if(typeof v==="bigint")return v.toString();return v;}
@@ -26,7 +26,7 @@ async function inspect(label,cfg){
    const order=(pk.length?pk:cols).map(x=>mysql.escapeId(x.name)).join(",");
    const [rows]=await db.query("SELECT * FROM "+mysql.escapeId(name)+" ORDER BY "+order);
    const hash=crypto.createHash("sha256");
-   for(const row of rows){const clean={};for(const key of Object.keys(row))clean[key]=norm(row[key]);hash.update(JSON.stringify(clean));hash.update("\\n");}
+   for(const row of rows){const clean={};for(const key of Object.keys(row))clean[key]=norm(row[key]);hash.update(JSON.stringify(clean));hash.update("\n");}
    result.tables[name]={rowCount:String(count.count),ddlSha256:crypto.createHash("sha256").update(ddl).digest("hex"),rowsSha256:hash.digest("hex"),primaryKey:pk.map(x=>x.name)};
   }
   return result;
