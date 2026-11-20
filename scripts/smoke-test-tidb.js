@@ -21,7 +21,6 @@ function config() {
 async function main(){
   const db=await mysql.createConnection(config());
   try{
-    await db.query("SET SESSION TRANSACTION READ ONLY");
     const [[identity]]=await db.query("SELECT DATABASE() AS databaseName, VERSION() AS serverVersion");
     if(identity.databaseName!=="noadframe" || !String(identity.serverVersion).includes("TiDB")) throw new Error("Connected to unexpected database engine or schema.");
     const expected=["movies","site_banner","site_banners","site_home_sections","users","comments","ai_feedback","copyright_reports","admin_security_events"];
