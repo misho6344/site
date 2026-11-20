@@ -30,7 +30,6 @@ function writeClientConfig(connection, file) {
     `user="${escape(connection.user)}"`,
     `password="${escape(connection.password)}"`,
     'ssl-mode=REQUIRED',
-    'connect-timeout=15',
     ''
   ].join('\n');
   fs.writeFileSync(file, content, { mode: 0o600 });
