@@ -1,0 +1,39 @@
+name: NoAdFrame selective homepage data restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_restore:
+        description: "Choose the exact confirmation to authorize writing the approved homepage data to TiDB."
+        required: true
+        type: choice
+        options:
+          - "NO - do not restore"
+          - "RESTORE_SITE_SETTINGS_TO_TIDB"
+        default: "NO - do not restore"
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    if: ${{ inputs.confirm_restore == 'RESTORE_SITE_SETTINGS_TO_TIDB' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/tidb-primary-enzonic-secondary
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install locked project dependencies
+        run: npm ci
+      - name: Restore approved homepage data and verify exact rows
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.SOURCE_DATABASE_URL }}
+          RESTORE_DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          CONFIRM_RESTORE: ${{ inputs.confirm_restore }}
+        run: node scripts/restore-site-settings.js
