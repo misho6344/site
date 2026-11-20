@@ -1,0 +1,33 @@
+name: NoAdFrame TiDB to Enzonic sync
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noadframe-database-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Refresh Enzonic secondary database
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+      - name: Synchronize TiDB snapshot to Enzonic
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.SOURCE_DATABASE_URL }}
+          ENZONIC_DATABASE_URL: ${{ secrets.ENZONIC_DATABASE_URL }}
+        run: node scripts/sync-enzonic.js
