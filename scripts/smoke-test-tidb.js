@@ -43,8 +43,9 @@ async function main(){
     const blobChecks={};
     for(const table of ["site_banner","site_banners"]){
       const [cols]=await db.query("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?",[table]);
-      if(cols.some(c=>c.COLUMN_NAME==="image_bytes")){
-        const [[row]]=await db.query("SELECT COUNT(*) AS rows_total, COALESCE(SUM(OCTET_LENGTH(image_bytes)),0) AS bytes_total FROM `"+table+"` WHERE image_bytes IS NOT NULL");
+      const imageColumn=cols.some(c=>c.COLUMN_NAME==="image_bytes")?"image_bytes":(cols.some(c=>c.COLUMN_NAME==="image_data")?"image_data":null);
+      if(imageColumn){
+        const [[row]]=await db.query("SELECT COUNT(*) AS rows_total, COALESCE(SUM(OCTET_LENGTH(`"+imageColumn+"`)),0) AS bytes_total FROM `"+table+"` WHERE `"+imageColumn+"` IS NOT NULL");
         blobChecks[table]={rowsWithImageBytes:Number(row.rows_total),totalBytes:Number(row.bytes_total)};
       }
     }
