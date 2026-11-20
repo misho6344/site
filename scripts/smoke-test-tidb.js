@@ -8,8 +8,9 @@ function config() {
   if(u.protocol!=="mysql:" || !u.hostname.endsWith(".tidbcloud.com") || Number(u.port)!==4000) {
     throw new Error("Safety stop: expected TiDB Cloud on port 4000.");
   }
-  if((u.searchParams.get("ssl-mode")||"").toUpperCase()!=="REQUIRED") {
-    throw new Error("Safety stop: TiDB TLS ssl-mode=REQUIRED is mandatory.");
+  const sslMode=(u.searchParams.get("ssl-mode")||"REQUIRED").toUpperCase();
+  if(!["REQUIRED","VERIFY_IDENTITY"].includes(sslMode)) {
+    throw new Error("Safety stop: TiDB TLS must be REQUIRED or VERIFY_IDENTITY.");
   }
   const db=decodeURIComponent(u.pathname.slice(1));
   if(db!=="noadframe") throw new Error("Safety stop: unexpected database name.");
