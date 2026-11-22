@@ -1108,12 +1108,12 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
   // The browser can render any cached movie data without waiting for a DB timeout.
   if (!databaseReady) {
     res.set("Cache-Control", "no-store");
-    return res.type("html").send(seoShell({
+    return res.status(503).set("Retry-After", "30").type("html").send(seoShell({
       title: "Movie temporarily unavailable — NoAdFrame",
       description: "The movie catalogue is temporarily recovering. Please retry shortly.",
       path: req.path,
       noindex: true
-    })).status(503).set("Retry-After", "30");
+    }));
   }
 
   const [rows] = await pool.query("SELECT m.* FROM movies m WHERE id = ?", [req.params.id]);
