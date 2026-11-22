@@ -1047,7 +1047,7 @@ function sitemapUrlEntry(route) {
   return "<url><loc>" + seoEsc(seoUrl(route)) + "</loc></url>";
 }
 function sitemapMovieEntry(movie) {
-  const route = "/movies/" + movie.id + "/" + seoSlug(movie.title_en);
+  const route = "/movies/" + movie.id + "/" + seoSlug(movie.title_en || movie.title_ka);
   const createdAt = movie.created_at ? new Date(movie.created_at) : null;
   const lastmod = createdAt && Number.isFinite(createdAt.getTime())
     ? "<lastmod>" + createdAt.toISOString().slice(0, 10) + "</lastmod>"
@@ -1063,12 +1063,12 @@ app.get("/robots.txt", (_req, res) => {
   res.type("text/plain").send("User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: " + seoUrl("/sitemap.xml") + "\n");
 });
 app.get("/sitemap.xml", wrap(async (_req, res) => {
-  const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> ''");
+  const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM movies WHERE (title_en IS NOT NULL AND TRIM(title_en) <> '') OR (title_ka IS NOT NULL AND TRIM(title_ka) <> '')");
   const total = Number(count?.total) || 0;
   const pageCount = Math.max(1, Math.ceil(total / SITEMAP_MOVIE_BATCH_SIZE));
 
   if (pageCount === 1) {
-    const [rows] = await pool.query("SELECT id, title_en, created_at FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id");
+    const [rows] = await pool.query("SELECT id, title_en, title_ka, created_at FROM movies WHERE (title_en IS NOT NULL AND TRIM(title_en) <> '') OR (title_ka IS NOT NULL AND TRIM(title_ka) <> '') ORDER BY id");
     const entries = [
       ...SITEMAP_STATIC_ROUTES.map(sitemapUrlEntry),
       ...rows.map(sitemapMovieEntry)
@@ -1092,7 +1092,7 @@ app.get(/^\/sitemap-movies-(\d+)\.xml$/, wrap(async (req, res) => {
   if (!Number.isSafeInteger(page) || page < 1) return res.status(404).type("text/plain").send("Sitemap page not found.");
   const offset = (page - 1) * SITEMAP_MOVIE_BATCH_SIZE;
   const [rows] = await pool.query(
-    "SELECT id, title_en, created_at FROM movies WHERE title_en IS NOT NULL AND TRIM(title_en) <> '' ORDER BY id LIMIT ? OFFSET ?",
+    "SELECT id, title_en, title_ka, created_at FROM movies WHERE (title_en IS NOT NULL AND TRIM(title_en) <> '') OR (title_ka IS NOT NULL AND TRIM(title_ka) <> '') ORDER BY id LIMIT ? OFFSET ?",
     [SITEMAP_MOVIE_BATCH_SIZE, offset]
   );
   if (!rows.length) return res.status(404).type("text/plain").send("Sitemap page not found.");
@@ -1109,11 +1109,11 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
   if (!databaseReady) {
     res.set("Cache-Control", "no-store");
     return res.type("html").send(seoShell({
-      title: "Movie — NoAdFrame",
-      description: "Open movie details on NoAdFrame.",
+      title: "Movie temporarily unavailable — NoAdFrame",
+      description: "The movie catalogue is temporarily recovering. Please retry shortly.",
       path: req.path,
       noindex: true
-    }));
+    })).status(503).set("Retry-After", "30");
   }
 
   const [rows] = await pool.query("SELECT m.* FROM movies m WHERE id = ?", [req.params.id]);
@@ -1124,7 +1124,7 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
   }
 
   const m = suppressRetiredVideos(rows)[0];
-  const slug = seoSlug(m.title_en);
+  const slug = seoSlug(m.title_en || m.title_ka);
   const route = "/movies/" + m.id + "/" + slug;
   if (req.path !== route) return res.redirect(301, route);
 
@@ -1145,11 +1145,11 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
   const graph = {
     "@context": "https://schema.org",
     "@type": "Movie",
-    "name": m.title_en,
+    "name": m.title_en || m.title_ka,
     "description": summary,
     "url": seoUrl(route)
   };
-  if (m.title_ka) graph.alternateName = m.title_ka;
+  if (m.title_ka && m.title_en && m.title_ka !== m.title_en) graph.alternateName = m.title_ka;
   if (m.release_year) graph.datePublished = String(m.release_year);
   if (m.genre) graph.genre = m.genre.split(",").map(value => value.trim()).filter(Boolean);
   if (m.director) graph.director = { "@type": "Person", "name": m.director };
@@ -1163,7 +1163,7 @@ app.get("/movies/:id/:slug?", wrap(async (req, res) => {
     "itemListElement": [
       { "@type": "ListItem", "position": 1, "name": "Home", "item": seoUrl("/") },
       { "@type": "ListItem", "position": 2, "name": "Movies", "item": seoUrl("/movies") },
-      { "@type": "ListItem", "position": 3, "name": m.title_en, "item": seoUrl(route) }
+      { "@type": "ListItem", "position": 3, "name": name, "item": seoUrl(route) }
     ]
   };
   const poster = m.poster_url && isHttpUrl(m.poster_url)
